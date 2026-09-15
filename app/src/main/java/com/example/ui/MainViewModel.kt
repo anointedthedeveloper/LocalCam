@@ -191,6 +191,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     _userMessage.value = "Zoom reset to 1x"
                 }
                 "snap" -> snapPhoto()
+                "brightness_up" -> {
+                    val max = _cameraSettings.value.maxExposureIndex
+                    val current = _cameraSettings.value.exposureCompensation
+                    val next = (current + 1).coerceAtMost(max)
+                    setExposureIndex(next)
+                    _userMessage.value = "Brightness: EV $next"
+                }
+                "brightness_down" -> {
+                    val min = _cameraSettings.value.minExposureIndex
+                    val current = _cameraSettings.value.exposureCompensation
+                    val next = (current - 1).coerceAtLeast(min)
+                    setExposureIndex(next)
+                    _userMessage.value = "Brightness: EV $next"
+                }
+                "brightness_reset" -> {
+                    setExposureIndex(0)
+                    _userMessage.value = "Brightness reset to Auto (0 EV)"
+                }
+                "focus" -> {
+                    triggerAutoFocus()
+                    _userMessage.value = "Auto Focus centered"
+                }
+                "auto_optimize" -> {
+                    autoOptimize()
+                }
             }
         }
     }
@@ -206,12 +231,42 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 "fps": ${stats.currentFps},
                 "bitrateKbps": ${stats.currentBitrateKbps},
                 "zoom": ${settings.zoomRatio},
+                "brightnessEv": ${settings.exposureCompensation},
                 "torch": ${settings.isTorchEnabled},
                 "camera": "${if (settings.lens == CameraLens.BACK) "back" else "front"}",
                 "clients": $clients,
                 "device": "${Build.MANUFACTURER} ${Build.MODEL}"
             }
         """.trimIndent()
+    }
+
+    fun setExposureIndex(index: Int) {
+        val bounded = index.coerceIn(
+            _cameraSettings.value.minExposureIndex,
+            _cameraSettings.value.maxExposureIndex
+        )
+        _cameraSettings.update { it.copy(exposureCompensation = bounded) }
+        cameraManager?.setExposureIndex(bounded)
+    }
+
+    fun triggerAutoFocus(width: Float = 1000f, height: Float = 1000f) {
+        cameraManager?.triggerAutoFocus(width, height)
+    }
+
+    fun cancelFocusMetering() {
+        cameraManager?.cancelFocusMetering()
+    }
+
+    fun autoOptimize() {
+        _cameraSettings.update {
+            it.copy(
+                exposureCompensation = 0,
+                zoomRatio = 1.0f,
+                isAutoOptimized = true
+            )
+        }
+        cameraManager?.autoOptimize()
+        _userMessage.value = "⚡ Scene Auto-Optimized (AF/AE/AWB balanced)"
     }
 
     fun setZoomRatio(ratio: Float) {

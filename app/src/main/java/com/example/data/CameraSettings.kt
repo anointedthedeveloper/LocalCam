@@ -33,5 +33,7 @@ data class CameraSettings(
     val exposureCompensation: Int = 0,
     val minExposureIndex: Int = -4,
     val maxExposureIndex: Int = 4,
+    val digitalBrightness: Float = 1.0f,
+    val isAutoOptimized: Boolean = true,
     val keepScreenOn: Boolean = true
 )

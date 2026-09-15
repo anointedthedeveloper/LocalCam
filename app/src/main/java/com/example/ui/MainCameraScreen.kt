@@ -243,6 +243,21 @@ fun MainCameraScreen(
                     onToggleTorch = { viewModel.toggleTorch() },
                     onSwitchLens = { viewModel.switchCameraLens() },
                     onSelectZoomRatio = { viewModel.setZoomRatio(it) },
+                    onAdjustBrightness = { viewModel.setExposureIndex(it) },
+                    onTriggerFocus = {
+                        previewViewRef?.let { pv ->
+                            focusPoint = Offset(pv.width / 2f, pv.height / 2f)
+                            viewModel.triggerAutoFocus(pv.width.toFloat(), pv.height.toFloat())
+                        } ?: run {
+                            viewModel.triggerAutoFocus()
+                        }
+                    },
+                    onAutoOptimize = {
+                        previewViewRef?.let { pv ->
+                            focusPoint = Offset(pv.width / 2f, pv.height / 2f)
+                        }
+                        viewModel.autoOptimize()
+                    },
                     onOpenConnectionPanel = { showConnectionPanel = !showConnectionPanel },
                     modifier = Modifier.align(Alignment.BottomCenter)
                 )

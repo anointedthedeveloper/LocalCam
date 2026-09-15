@@ -295,7 +295,22 @@ class LocalCamClientApp:
             pady=4,
             command=self.install_virtual_camera_driver
         )
-        btn_install_drv.pack(fill=tk.X, padx=10, pady=(0, 8))
+        btn_install_drv.pack(fill=tk.X, padx=10, pady=(0, 4))
+
+        btn_restart_vcam = tk.Button(
+            vcam_box,
+            text="🔄 Reset Virtual Cam / Fix 'In Use'",
+            font=("Segoe UI", 8),
+            bg="#1C2333",
+            fg="#00E5FF",
+            bd=1,
+            relief=tk.SOLID,
+            cursor="hand2",
+            padx=8,
+            pady=3,
+            command=self.restart_virtual_camera
+        )
+        btn_restart_vcam.pack(fill=tk.X, padx=10, pady=(0, 8))
 
         # Divider
         tk.Frame(parent, bg="#283248", height=1).pack(fill=tk.X, padx=14, pady=6)
@@ -363,6 +378,74 @@ class LocalCamClientApp:
 
         grid_frame.columnconfigure(0, weight=1)
         grid_frame.columnconfigure(1, weight=1)
+
+        # Row 3: Brightness Controls
+        bright_frame = tk.Frame(parent, bg="#141923")
+        bright_frame.pack(fill=tk.X, padx=14, pady=3)
+
+        btn_bright_down = tk.Button(
+            bright_frame,
+            text="☀️ Bright -",
+            font=("Segoe UI", 8),
+            bg="#1C2333",
+            fg="#F0F4FC",
+            bd=0,
+            cursor="hand2",
+            command=lambda: self.send_remote_control("brightness_down")
+        )
+        btn_bright_down.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 2))
+
+        btn_bright_rst = tk.Button(
+            bright_frame,
+            text="0 EV (Auto)",
+            font=("Segoe UI", 8),
+            bg="#1C2333",
+            fg="#00E5FF",
+            bd=0,
+            cursor="hand2",
+            command=lambda: self.send_remote_control("brightness_reset")
+        )
+        btn_bright_rst.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+
+        btn_bright_up = tk.Button(
+            bright_frame,
+            text="☀️ Bright +",
+            font=("Segoe UI", 8),
+            bg="#1C2333",
+            fg="#F0F4FC",
+            bd=0,
+            cursor="hand2",
+            command=lambda: self.send_remote_control("brightness_up")
+        )
+        btn_bright_up.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(2, 0))
+
+        # Row 4: Auto-Focus & Auto-Optimize
+        opt_frame = tk.Frame(parent, bg="#141923")
+        opt_frame.pack(fill=tk.X, padx=14, pady=3)
+
+        btn_focus = tk.Button(
+            opt_frame,
+            text="🎯 Auto-Focus (AF)",
+            font=("Segoe UI", 9),
+            bg="#1C2333",
+            fg="#F0F4FC",
+            bd=0,
+            cursor="hand2",
+            command=lambda: self.send_remote_control("focus")
+        )
+        btn_focus.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 2))
+
+        btn_opt = tk.Button(
+            opt_frame,
+            text="⚡ Auto-Optimize",
+            font=("Segoe UI", 9, "bold"),
+            bg="#1C2333",
+            fg="#00E5FF",
+            bd=0,
+            cursor="hand2",
+            command=lambda: self.send_remote_control("auto_optimize")
+        )
+        btn_opt.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(2, 0))
 
         # Remote High-Res Snapshot trigger
         btn_snap = tk.Button(
@@ -536,6 +619,25 @@ class LocalCamClientApp:
             if not self.stop_event.is_set():
                 self.root.after(0, self.stop_streaming)
 
+    def restart_virtual_camera(self):
+        """Safely releases and resets the virtual camera instance."""
+        if self.vcam is not None:
+            try:
+                self.vcam.close()
+            except Exception as e:
+                print(f"[LocalCam] Error closing virtual camera: {e}")
+            self.vcam = None
+
+        self.root.after(0, lambda: self.vcam_status_text.set("Virtual Camera: Resetting (Will re-link on next frame)"))
+        messagebox.showinfo(
+            "Virtual Camera Reset",
+            "Virtual Camera device handle was reset.\n\n"
+            "If VideoPsalm or Google Meet showed 'Webcam not available / in use':\n"
+            "1. Make sure other apps like Zoom, Teams, or browser tabs with Google Meet are closed.\n"
+            "2. Ensure 'START WEBCAM FEED' is active here FIRST.\n"
+            "3. In VideoPsalm, select 'Unity Video Capture' in Video settings."
+        )
+
     def _process_and_dispatch_frame(self, bgr_frame):
         # Apply horizontal mirror if checked (standard for webcams)
         if self.mirror_horizontal.get():
@@ -558,8 +660,8 @@ class LocalCamClientApp:
                             pass
                     print(f"[LocalCam] Initializing virtual camera device at {w}x{h}...")
 
-                    # Try unityvideo FIRST (for standalone Windows users without OBS), then obs, then default
-                    backends = ["unityvideo", "obs", None] if sys.platform.startswith("win") else [None, "v4l2loopback"]
+                    # Try unitycapture FIRST (for standalone Windows users without OBS), then obs, then default
+                    backends = ["unitycapture", "obs", None] if sys.platform.startswith("win") else [None, "v4l2loopback"]
                     last_err = None
                     self.vcam = None
                     for b in backends:
@@ -568,8 +670,10 @@ class LocalCamClientApp:
                             if b:
                                 kwargs["backend"] = b
                             self.vcam = pyvirtualcam.Camera(**kwargs)
-                            actual_dev = getattr(self.vcam, "device", "Virtual Camera")
+                            actual_dev = getattr(self.vcam, "device", "Unity Video Capture" if b == "unitycapture" else "Virtual Camera")
                             print(f"[LocalCam] Active virtual camera: '{actual_dev}' using backend '{b or 'default'}'")
+                            # Prime driver with first frame immediately
+                            self.vcam.send(rgb_frame)
                             self.root.after(0, lambda d=actual_dev: (
                                 self.vcam_status_text.set(f"Virtual Camera: Active ({d})"),
                                 self.detected_camera_device.set(d)

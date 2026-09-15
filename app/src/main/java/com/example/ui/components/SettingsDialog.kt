@@ -191,6 +191,44 @@ fun SettingsDialog(
                     }
                 }
 
+                // Brightness / Exposure Compensation Slider
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "CAMERA BRIGHTNESS (EXPOSURE EV)",
+                            color = TextTertiary,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.sp
+                        )
+                        Text(
+                            text = "${if (settings.exposureCompensation > 0) "+" else ""}${settings.exposureCompensation} EV",
+                            color = BroadcastCyan,
+                            fontSize = 12.sp,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    val minExp = settings.minExposureIndex.toFloat()
+                    val maxExp = settings.maxExposureIndex.toFloat()
+                    val steps = (settings.maxExposureIndex - settings.minExposureIndex - 1).coerceAtLeast(0)
+                    Slider(
+                        value = settings.exposureCompensation.toFloat(),
+                        onValueChange = { onSettingsChanged(settings.copy(exposureCompensation = it.toInt())) },
+                        valueRange = minExp..maxExp,
+                        steps = steps,
+                        colors = SliderDefaults.colors(
+                            thumbColor = BroadcastCyan,
+                            activeTrackColor = BroadcastCyan,
+                            inactiveTrackColor = GunmetalBorder
+                        )
+                    )
+                }
+
                 // JPEG Quality / Adaptive Bitrate Slider
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Row(

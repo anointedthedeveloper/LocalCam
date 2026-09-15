@@ -23,15 +23,21 @@ numpy>=1.20.0
         "cd /d \"%~dp0\"\r\n" +
         "set DRIVER_DIR=%~dp0driver\r\n" +
         "if not exist \"%DRIVER_DIR%\\UnityCaptureFilter64.dll\" set DRIVER_DIR=%~dp0\r\n" +
+        "echo [1/3] Clearing any existing filter instances...\r\n" +
+        "regsvr32 /u /s \"%DRIVER_DIR%\\UnityCaptureFilter64.dll\" 2>nul\r\n" +
+        "regsvr32 /u /s \"%DRIVER_DIR%\\UnityCaptureFilter32.dll\" 2>nul\r\n" +
+        "echo [2/3] Registering 64-bit Virtual Camera Filter...\r\n" +
         "regsvr32 /s \"%DRIVER_DIR%\\UnityCaptureFilter64.dll\"\r\n" +
+        "echo [3/3] Registering 32-bit Virtual Camera Filter...\r\n" +
         "regsvr32 /s \"%DRIVER_DIR%\\UnityCaptureFilter32.dll\"\r\n" +
         "echo.\r\n" +
         "echo ======================================================================\r\n" +
         "echo   SUCCESS! Virtual Camera registered successfully!\r\n" +
         "echo ======================================================================\r\n" +
-        "echo In VideoPsalm, Google Meet, Zoom, or Teams, select:\r\n" +
-        "echo   'Unity Video Capture'\r\n" +
-        "echo in your camera input list!\r\n" +
+        "echo VideoPsalm / Google Meet / Zoom Setup:\r\n" +
+        "echo 1. Close any browser tabs with Google Meet, Zoom, Teams, or Camera apps.\r\n" +
+        "echo 2. Run start_pc_client.bat and click 'START WEBCAM FEED' FIRST.\r\n" +
+        "echo 3. In VideoPsalm: Go to Settings ^> Video and select 'Unity Video Capture'.\r\n" +
         "echo ======================================================================\r\n" +
         "pause\r\n"
 
@@ -238,7 +244,22 @@ class LocalCamClientApp:
 
         vcam_box = tk.Frame(parent, bg="#1C2333", highlightbackground="#283248", highlightthickness=1)
         vcam_box.pack(fill=tk.X, padx=14, pady=8)
-        tk.Label(vcam_box, text="Virtual Camera Target:\nSelect 'OBS Virtual Camera' or\n'LocalCam' in Zoom/Teams/Meet.", font=("Segoe UI", 8), fg="#8E9BB0", bg="#1C2333", justify=tk.LEFT).pack(padx=10, pady=8, anchor="w")
+        tk.Label(vcam_box, text="Virtual Camera Target:\nUses 'Unity Video Capture' (No OBS)\nor 'OBS Virtual Camera' if installed.", font=("Segoe UI", 8), fg="#8E9BB0", bg="#1C2333", justify=tk.LEFT).pack(padx=10, pady=(8, 4), anchor="w")
+        
+        btn_restart_vcam = tk.Button(
+            vcam_box,
+            text="🔄 Reset Virtual Cam / Fix 'In Use'",
+            font=("Segoe UI", 8),
+            bg="#1C2333",
+            fg="#00E5FF",
+            bd=1,
+            relief=tk.SOLID,
+            cursor="hand2",
+            padx=8,
+            pady=3,
+            command=self.restart_virtual_camera
+        )
+        btn_restart_vcam.pack(fill=tk.X, padx=10, pady=(0, 8))
 
         tk.Frame(parent, bg="#283248", height=1).pack(fill=tk.X, padx=14, pady=6)
         tk.Label(parent, text="REMOTE PHONE CONTROLS", font=("Segoe UI", 9, "bold"), fg="#8E9BB0", bg="#141923").pack(anchor="w", **pad_opts)
@@ -251,6 +272,19 @@ class LocalCamClientApp:
         tk.Button(grid_frame, text="1x Reset", font=("Segoe UI", 9), bg="#1C2333", fg="#F0F4FC", bd=0, cursor="hand2", command=lambda: self.send_remote_control("zoom_reset")).grid(row=1, column=1, sticky="ew", padx=(4, 0), pady=3)
         grid_frame.columnconfigure(0, weight=1)
         grid_frame.columnconfigure(1, weight=1)
+
+        # Brightness Controls
+        bright_frame = tk.Frame(parent, bg="#141923")
+        bright_frame.pack(fill=tk.X, padx=14, pady=3)
+        tk.Button(bright_frame, text="☀️ Bright -", font=("Segoe UI", 8), bg="#1C2333", fg="#F0F4FC", bd=0, cursor="hand2", command=lambda: self.send_remote_control("brightness_down")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 2))
+        tk.Button(bright_frame, text="0 EV", font=("Segoe UI", 8), bg="#1C2333", fg="#00E5FF", bd=0, cursor="hand2", command=lambda: self.send_remote_control("brightness_reset")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+        tk.Button(bright_frame, text="☀️ Bright +", font=("Segoe UI", 8), bg="#1C2333", fg="#F0F4FC", bd=0, cursor="hand2", command=lambda: self.send_remote_control("brightness_up")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(2, 0))
+
+        # Focus & Auto-Optimize
+        opt_frame = tk.Frame(parent, bg="#141923")
+        opt_frame.pack(fill=tk.X, padx=14, pady=3)
+        tk.Button(opt_frame, text="🎯 Auto-Focus (AF)", font=("Segoe UI", 9), bg="#1C2333", fg="#F0F4FC", bd=0, cursor="hand2", command=lambda: self.send_remote_control("focus")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 2))
+        tk.Button(opt_frame, text="⚡ Auto-Optimize", font=("Segoe UI", 9, "bold"), bg="#1C2333", fg="#00E5FF", bd=0, cursor="hand2", command=lambda: self.send_remote_control("auto_optimize")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(2, 0))
 
         tk.Button(parent, text="📸 Save Hi-Res Photo to Phone", font=("Segoe UI", 9), bg="#1C2333", fg="#00E5FF", bd=0, cursor="hand2", command=lambda: self.send_remote_control("snap")).pack(fill=tk.X, padx=14, pady=(6, 12))
 
@@ -342,6 +376,23 @@ class LocalCamClientApp:
             if not self.stop_event.is_set():
                 self.root.after(0, self.stop_streaming)
 
+    def restart_virtual_camera(self):
+        if self.vcam is not None:
+            try:
+                self.vcam.close()
+            except Exception:
+                pass
+            self.vcam = None
+        self.root.after(0, lambda: self.vcam_status_text.set("Virtual Camera: Resetting (Will re-link on next frame)"))
+        messagebox.showinfo(
+            "Virtual Camera Reset",
+            "Virtual Camera device handle was reset.\n\n"
+            "If VideoPsalm or Google Meet showed 'Webcam not available / in use':\n"
+            "1. Make sure other apps like Zoom, Teams, or browser tabs with Google Meet are closed.\n"
+            "2. Ensure 'START WEBCAM FEED' is active here FIRST.\n"
+            "3. In VideoPsalm, select 'Unity Video Capture' in Video settings."
+        )
+
     def _process_and_dispatch_frame(self, bgr_frame):
         if self.mirror_horizontal.get():
             bgr_frame = cv2.flip(bgr_frame, 1)
@@ -355,9 +406,33 @@ class LocalCamClientApp:
             try:
                 if self.vcam is None or self.vcam.width != w or self.vcam.height != h:
                     if self.vcam is not None:
-                        self.vcam.close()
-                    self.vcam = pyvirtualcam.Camera(width=w, height=h, fps=30, fmt=pyvirtualcam.PixelFormat.RGB)
-                    self.root.after(0, lambda: self.vcam_status_text.set(f"Virtual Camera: Active ({self.vcam.device})"))
+                        try:
+                            self.vcam.close()
+                        except Exception:
+                            pass
+
+                    backends = ["unitycapture", "obs", None] if sys.platform.startswith("win") else [None, "v4l2loopback"]
+                    last_err = None
+                    self.vcam = None
+                    for b in backends:
+                        try:
+                            kwargs = {"width": w, "height": h, "fps": 30, "fmt": pyvirtualcam.PixelFormat.RGB}
+                            if b:
+                                kwargs["backend"] = b
+                            self.vcam = pyvirtualcam.Camera(**kwargs)
+                            actual_dev = getattr(self.vcam, "device", "Unity Video Capture" if b == "unitycapture" else "Virtual Camera")
+                            self.vcam.send(rgb_frame)
+                            self.root.after(0, lambda d=actual_dev: (
+                                self.vcam_status_text.set(f"Virtual Camera: Active ({d})")
+                            ))
+                            break
+                        except Exception as be:
+                            last_err = be
+                            continue
+
+                    if self.vcam is None:
+                        raise last_err or RuntimeError("No virtual camera backend available")
+
                 self.vcam.send(rgb_frame)
                 self.vcam.sleep_until_next_frame()
             except Exception as e:

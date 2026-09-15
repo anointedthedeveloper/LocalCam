@@ -296,7 +296,40 @@ class CameraManager(
         val factory = SurfaceOrientedMeteringPointFactory(width, height)
         val point = factory.createPoint(x, y)
         val action = FocusMeteringAction.Builder(point, FocusMeteringAction.FLAG_AF or FocusMeteringAction.FLAG_AE)
-            .setAutoCancelDuration(3, java.util.concurrent.TimeUnit.SECONDS)
+            .setAutoCancelDuration(4, java.util.concurrent.TimeUnit.SECONDS)
+            .build()
+        cam.cameraControl.startFocusAndMetering(action)
+    }
+
+    fun triggerAutoFocus(width: Float = 1000f, height: Float = 1000f) {
+        val cam = camera ?: return
+        val factory = SurfaceOrientedMeteringPointFactory(width, height)
+        val centerPoint = factory.createPoint(width / 2f, height / 2f)
+        val action = FocusMeteringAction.Builder(
+            centerPoint,
+            FocusMeteringAction.FLAG_AF or FocusMeteringAction.FLAG_AE or FocusMeteringAction.FLAG_AWB
+        ).setAutoCancelDuration(3, java.util.concurrent.TimeUnit.SECONDS)
+            .build()
+        cam.cameraControl.startFocusAndMetering(action)
+    }
+
+    fun cancelFocusMetering() {
+        camera?.cameraControl?.cancelFocusAndMetering()
+    }
+
+    fun autoOptimize(width: Float = 1000f, height: Float = 1000f) {
+        val cam = camera ?: return
+        // 1. Reset exposure compensation to 0 (Auto Exposure baseline)
+        cam.cameraControl.setExposureCompensationIndex(0)
+        // 2. Clear manual locks to let continuous 3A balance
+        cam.cameraControl.cancelFocusAndMetering()
+        // 3. Trigger active 3A sweep across the center of frame
+        val factory = SurfaceOrientedMeteringPointFactory(width, height)
+        val centerPoint = factory.createPoint(width / 2f, height / 2f)
+        val action = FocusMeteringAction.Builder(
+            centerPoint,
+            FocusMeteringAction.FLAG_AF or FocusMeteringAction.FLAG_AE or FocusMeteringAction.FLAG_AWB
+        ).setAutoCancelDuration(3, java.util.concurrent.TimeUnit.SECONDS)
             .build()
         cam.cameraControl.startFocusAndMetering(action)
     }
