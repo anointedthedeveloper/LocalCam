@@ -68,6 +68,20 @@ The client will automatically bind to `/dev/video10` and display as "LocalCam Vi
 
 ---
 
+## 📱 Phone Setup & Offline Connection Notes
+
+1. **Zero Mobile Data Needed:**
+   - On your Android phone, turn ON **Personal Hotspot**.
+   - You can keep Mobile / Cellular Data **OFF** — the direct Wi-Fi hotspot creates a local wireless link that requires no internet connection.
+2. **Finding the Phone IP:**
+   - When connected via Phone Hotspot, the phone's IP address is typically `192.168.43.1`.
+   - If both phone and laptop are connected to a home/office router, LocalCam displays the exact IP address on the phone's camera HUD.
+3. **Downloading the Client Directly from the Phone:**
+   - Once connected to the phone's hotspot, you don't even need internet access to download this PC client!
+   - Simply open `http://192.168.43.1:8080/pc` in your laptop browser to download `start_pc_client.bat`, `localcam_pc_client.py`, and `requirements.txt` directly from the phone.
+
+---
+
 ## CLI / Headless Mode
 If you prefer running without a GUI or inside a script:
 ```bash

@@ -313,7 +313,7 @@ fun ConnectionPanel(
                 onClick = onOpenHotspotHelp,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(42.dp)
+                    .height(44.dp)
                     .testTag("hotspot_guide_button"),
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = TextPrimary),
                 border = androidx.compose.foundation.BorderStroke(1.dp, GunmetalBorder)
@@ -322,10 +322,10 @@ fun ConnectionPanel(
                     imageVector = Icons.Default.WifiTethering,
                     contentDescription = null,
                     modifier = Modifier.size(16.dp),
-                    tint = StudioAmber
+                    tint = BroadcastCyan
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                Text(text = "Hotspot Setup & Settings", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Text(text = "Open Complete Setup Guide (Hotspot, PC & OBS)", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
             }
         }
     }
