@@ -1,0 +1,7 @@
+{
+  "name": "LocalCam",
+  "description": "Wireless camera for laptops over local Wi-Fi and hotspot for live presentations, church services, and OBS Studio",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
