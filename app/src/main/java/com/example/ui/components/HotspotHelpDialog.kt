@@ -271,23 +271,23 @@ private fun HotspotTabContent(onOpenHotspotSettings: () -> Unit) {
 private fun PcWebcamTabContent() {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(
-            text = "💻 USE IN ZOOM, MEET, TEAMS & DISCORD",
+            text = "💻 USE IN VIDEOPSALM, GOOGLE MEET, ZOOM & TEAMS",
             color = BroadcastCyan,
             fontSize = 11.sp,
             fontWeight = FontWeight.Bold
         )
         Text(
-            text = "Use your phone as a native virtual webcam on your computer with sub-100ms latency:",
+            text = "Use your phone as a high-definition webcam on your PC. No OBS Studio is required!",
             color = TextSecondary,
             fontSize = 12.sp,
             lineHeight = 16.sp
         )
 
         StepItem(step = "1", text = "Connect laptop to the phone's Hotspot or same Wi-Fi.")
-        StepItem(step = "2", text = "Open laptop browser to the IP shown in LocalCam (e.g., http://192.168.43.1:8080).")
-        StepItem(step = "3", text = "Click 'Download Windows Launcher (.bat)' (or Mac/Linux script).")
-        StepItem(step = "4", text = "Double-click 'start_pc_client.bat' on your PC to launch the client.")
-        StepItem(step = "5", text = "Click 'Start Webcam Feed', then in Zoom / Teams / Meet select 'OBS Virtual Camera' or 'LocalCam'!")
+        StepItem(step = "2", text = "Open laptop browser to http://192.168.43.1:8080/pc to download the client files.")
+        StepItem(step = "3", text = "WITHOUT OBS: Run 'install_virtual_camera.bat' as Administrator once to register the driver.")
+        StepItem(step = "4", text = "Double-click 'start_pc_client.bat' and click 'START WEBCAM FEED'.")
+        StepItem(step = "5", text = "In VideoPsalm, Google Meet, or Zoom video settings, select: 'Unity Video Capture' (or OBS Virtual Camera)!")
     }
 }
 

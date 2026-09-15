@@ -9,6 +9,42 @@ requests>=2.28.0
 numpy>=1.20.0
 """
 
+    const val INSTALL_VIRTUAL_CAMERA_BAT = "@echo off\r\n" +
+        "title LocalCam - Virtual Camera Driver Setup (No OBS Required)\r\n" +
+        "color 0B\r\n" +
+        "echo ======================================================================\r\n" +
+        "echo           LocalCam Windows Virtual Camera Installer (NO OBS!)\r\n" +
+        "echo ======================================================================\r\n" +
+        "echo.\r\n" +
+        "echo This registers the lightweight DirectShow Virtual Camera driver into\r\n" +
+        "echo Windows so that VideoPsalm, Google Meet, Zoom, and Teams\r\n" +
+        "echo detect LocalCam as a native webcam device.\r\n" +
+        "echo.\r\n" +
+        "cd /d \"%~dp0\"\r\n" +
+        "set DRIVER_DIR=%~dp0driver\r\n" +
+        "if not exist \"%DRIVER_DIR%\\UnityCaptureFilter64.dll\" set DRIVER_DIR=%~dp0\r\n" +
+        "regsvr32 /s \"%DRIVER_DIR%\\UnityCaptureFilter64.dll\"\r\n" +
+        "regsvr32 /s \"%DRIVER_DIR%\\UnityCaptureFilter32.dll\"\r\n" +
+        "echo.\r\n" +
+        "echo ======================================================================\r\n" +
+        "echo   SUCCESS! Virtual Camera registered successfully!\r\n" +
+        "echo ======================================================================\r\n" +
+        "echo In VideoPsalm, Google Meet, Zoom, or Teams, select:\r\n" +
+        "echo   'Unity Video Capture'\r\n" +
+        "echo in your camera input list!\r\n" +
+        "echo ======================================================================\r\n" +
+        "pause\r\n"
+
+    const val UNINSTALL_VIRTUAL_CAMERA_BAT = "@echo off\r\n" +
+        "title LocalCam - Remove Virtual Camera Driver\r\n" +
+        "cd /d \"%~dp0\"\r\n" +
+        "set DRIVER_DIR=%~dp0driver\r\n" +
+        "if not exist \"%DRIVER_DIR%\\UnityCaptureFilter64.dll\" set DRIVER_DIR=%~dp0\r\n" +
+        "regsvr32 /u /s \"%DRIVER_DIR%\\UnityCaptureFilter64.dll\"\r\n" +
+        "regsvr32 /u /s \"%DRIVER_DIR%\\UnityCaptureFilter32.dll\"\r\n" +
+        "echo Virtual Camera driver has been uninstalled.\r\n" +
+        "pause\r\n"
+
     const val START_PC_CLIENT_BAT = """@echo off
 title LocalCam PC Virtual Webcam Client
 color 0B
@@ -492,6 +528,31 @@ if __name__ == "__main__":
         <a href="/" class="btn btn-outline">&larr; Back to Live Stream</a>
     </header>
 
+    <!-- OBS-Free Virtual Camera Registration Card -->
+    <div class="card" style="border: 1px solid #FFB300; background: #18150F;">
+        <div class="card-title" style="color: #FFB300;">⚡ Using VideoPsalm, Google Meet, or Zoom WITHOUT OBS?</div>
+        <div style="color: var(--text-secondary); font-size: 13px; margin-bottom: 14px;">
+            OBS Studio is <b>NOT required</b>! Windows simply needs a lightweight DirectShow virtual camera driver registered once:
+        </div>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px;">
+            <a href="/client/install_virtual_camera.bat" download="install_virtual_camera.bat" class="btn" style="background: #FFB300; color: #000; font-weight: bold;">
+                <span>🔧 Download Driver Installer (install_virtual_camera.bat)</span>
+            </a>
+            <a href="/client/driver/UnityCaptureFilter64.dll" download="UnityCaptureFilter64.dll" class="btn btn-outline">
+                <span>📁 UnityCaptureFilter64.dll (157 KB)</span>
+            </a>
+            <a href="/client/driver/UnityCaptureFilter32.dll" download="UnityCaptureFilter32.dll" class="btn btn-outline">
+                <span>📁 UnityCaptureFilter32.dll (168 KB)</span>
+            </a>
+        </div>
+        <div style="font-size: 13px; color: #D1D5DB; line-height: 1.5;">
+            <b>How to register:</b><br>
+            1. Right-click <code>install_virtual_camera.bat</code> &rarr; <b>Run as administrator</b>.<br>
+            2. It registers in 2 seconds.<br>
+            3. Open <b>VideoPsalm</b> or <b>Google Meet</b> &rarr; Settings &rarr; Video &rarr; Select <b>"Unity Video Capture"</b>!
+        </div>
+    </div>
+
     <!-- Download Card -->
     <div class="card" style="border: 1px solid var(--accent-cyan); background: linear-gradient(180deg, #141A28 0%, #101520 100%);">
         <div class="card-title">1-Click Downloads for your Laptop</div>
@@ -501,6 +562,9 @@ if __name__ == "__main__":
         <div style="display: flex; gap: 10px; flex-wrap: wrap;">
             <a href="/client/start_pc_client.bat" download="start_pc_client.bat" class="btn">
                 <span>⊞ Download Windows Launcher (.bat)</span>
+            </a>
+            <a href="/client/install_virtual_camera.bat" download="install_virtual_camera.bat" class="btn btn-outline" style="border-color: #FFB300; color: #FFB300;">
+                <span>🔧 install_virtual_camera.bat (No OBS)</span>
             </a>
             <a href="/client/localcam_pc_client.py" download="localcam_pc_client.py" class="btn btn-outline">
                 <span>🐍 Download Python App (.py)</span>
@@ -520,9 +584,10 @@ if __name__ == "__main__":
         <ol>
             <li>Ensure your laptop is connected to this phone's <b>Hotspot</b> or Wi-Fi network.</li>
             <li>Make sure <b>Python 3.8+</b> is installed on your PC (from <a href="https://www.python.org" target="_blank" style="color: var(--accent-cyan)">python.org</a>).</li>
+            <li><b>If you don't have OBS</b>: Run <code>install_virtual_camera.bat</code> as Administrator once.</li>
             <li>Double-click <code>start_pc_client.bat</code> (Windows) or run <code>./start_pc_client.sh</code> (Mac/Linux).</li>
             <li>The app will automatically connect to <code>$hostAddress</code> and start the Virtual Camera.</li>
-            <li>In <b>Zoom, Microsoft Teams, or Google Meet</b>: open Camera settings and choose <b>"OBS Virtual Camera"</b> or <b>"LocalCam"</b>!</li>
+            <li>In <b>VideoPsalm, Google Meet, Zoom, or Teams</b>: open Camera settings and choose <b>"Unity Video Capture"</b> (or <b>"OBS Virtual Camera"</b>)!</li>
         </ol>
     </div>
 

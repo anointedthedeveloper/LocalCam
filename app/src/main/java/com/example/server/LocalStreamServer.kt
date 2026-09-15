@@ -1,5 +1,6 @@
 package com.example.server
 
+import android.content.Context
 import android.util.Log
 import com.example.data.ConnectedClient
 import com.example.data.StreamStats
@@ -23,6 +24,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 class LocalStreamServer(
     private val port: Int = 8080,
+    private val context: Context? = null,
     private val onClientCountChanged: (List<ConnectedClient>) -> Unit,
     private val onRemoteControlReceived: (String, Map<String, String>) -> Unit,
     private val getStatusJson: () -> String
@@ -323,7 +325,9 @@ class LocalStreamServer(
                 }
 
                 path == "/client/localcam_pc_client.py" -> {
-                    val bytes = PcClientDistribution.LOCALCAM_PC_CLIENT_PY.toByteArray(StandardCharsets.UTF_8)
+                    val bytes = try {
+                        context?.assets?.open("client/localcam_pc_client.py")?.use { it.readBytes() }
+                    } catch (e: Exception) { null } ?: PcClientDistribution.LOCALCAM_PC_CLIENT_PY.toByteArray(StandardCharsets.UTF_8)
                     val response = "HTTP/1.1 200 OK\r\n" +
                             "Content-Type: text/x-python; charset=utf-8\r\n" +
                             "Content-Disposition: attachment; filename=\"localcam_pc_client.py\"\r\n" +
@@ -336,7 +340,9 @@ class LocalStreamServer(
                 }
 
                 path == "/client/start_pc_client.bat" || path == "/download/client" -> {
-                    val bytes = PcClientDistribution.START_PC_CLIENT_BAT.toByteArray(StandardCharsets.UTF_8)
+                    val bytes = try {
+                        context?.assets?.open("client/start_pc_client.bat")?.use { it.readBytes() }
+                    } catch (e: Exception) { null } ?: PcClientDistribution.START_PC_CLIENT_BAT.toByteArray(StandardCharsets.UTF_8)
                     val response = "HTTP/1.1 200 OK\r\n" +
                             "Content-Type: application/x-bat\r\n" +
                             "Content-Disposition: attachment; filename=\"start_pc_client.bat\"\r\n" +
@@ -344,6 +350,76 @@ class LocalStreamServer(
                             "Connection: close\r\n\r\n"
                     outputStream.write(response.toByteArray(StandardCharsets.US_ASCII))
                     outputStream.write(bytes)
+                    outputStream.flush()
+                    socket.close()
+                }
+
+                path == "/client/install_virtual_camera.bat" || path == "/client/install.bat" -> {
+                    val bytes = try {
+                        context?.assets?.open("client/install_virtual_camera.bat")?.use { it.readBytes() }
+                    } catch (e: Exception) { null } ?: PcClientDistribution.INSTALL_VIRTUAL_CAMERA_BAT.toByteArray(StandardCharsets.UTF_8)
+                    val response = "HTTP/1.1 200 OK\r\n" +
+                            "Content-Type: application/x-bat\r\n" +
+                            "Content-Disposition: attachment; filename=\"install_virtual_camera.bat\"\r\n" +
+                            "Content-Length: ${bytes.size}\r\n" +
+                            "Connection: close\r\n\r\n"
+                    outputStream.write(response.toByteArray(StandardCharsets.US_ASCII))
+                    outputStream.write(bytes)
+                    outputStream.flush()
+                    socket.close()
+                }
+
+                path == "/client/uninstall_virtual_camera.bat" -> {
+                    val bytes = try {
+                        context?.assets?.open("client/uninstall_virtual_camera.bat")?.use { it.readBytes() }
+                    } catch (e: Exception) { null } ?: PcClientDistribution.UNINSTALL_VIRTUAL_CAMERA_BAT.toByteArray(StandardCharsets.UTF_8)
+                    val response = "HTTP/1.1 200 OK\r\n" +
+                            "Content-Type: application/x-bat\r\n" +
+                            "Content-Disposition: attachment; filename=\"uninstall_virtual_camera.bat\"\r\n" +
+                            "Content-Length: ${bytes.size}\r\n" +
+                            "Connection: close\r\n\r\n"
+                    outputStream.write(response.toByteArray(StandardCharsets.US_ASCII))
+                    outputStream.write(bytes)
+                    outputStream.flush()
+                    socket.close()
+                }
+
+                path == "/client/driver/UnityCaptureFilter64.dll" || path == "/client/UnityCaptureFilter64.dll" -> {
+                    val bytes = try {
+                        context?.assets?.open("driver/UnityCaptureFilter64.dll")?.use { it.readBytes() }
+                    } catch (e: Exception) { null }
+                    if (bytes != null) {
+                        val response = "HTTP/1.1 200 OK\r\n" +
+                                "Content-Type: application/octet-stream\r\n" +
+                                "Content-Disposition: attachment; filename=\"UnityCaptureFilter64.dll\"\r\n" +
+                                "Content-Length: ${bytes.size}\r\n" +
+                                "Connection: close\r\n\r\n"
+                        outputStream.write(response.toByteArray(StandardCharsets.US_ASCII))
+                        outputStream.write(bytes)
+                    } else {
+                        val notFound = "HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n"
+                        outputStream.write(notFound.toByteArray(StandardCharsets.US_ASCII))
+                    }
+                    outputStream.flush()
+                    socket.close()
+                }
+
+                path == "/client/driver/UnityCaptureFilter32.dll" || path == "/client/UnityCaptureFilter32.dll" -> {
+                    val bytes = try {
+                        context?.assets?.open("driver/UnityCaptureFilter32.dll")?.use { it.readBytes() }
+                    } catch (e: Exception) { null }
+                    if (bytes != null) {
+                        val response = "HTTP/1.1 200 OK\r\n" +
+                                "Content-Type: application/octet-stream\r\n" +
+                                "Content-Disposition: attachment; filename=\"UnityCaptureFilter32.dll\"\r\n" +
+                                "Content-Length: ${bytes.size}\r\n" +
+                                "Connection: close\r\n\r\n"
+                        outputStream.write(response.toByteArray(StandardCharsets.US_ASCII))
+                        outputStream.write(bytes)
+                    } else {
+                        val notFound = "HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n"
+                        outputStream.write(notFound.toByteArray(StandardCharsets.US_ASCII))
+                    }
                     outputStream.flush()
                     socket.close()
                 }

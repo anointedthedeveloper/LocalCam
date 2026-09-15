@@ -50,10 +50,32 @@ def run_cli_stream(ip, port, mirror=True, requested_fps=30):
     print(f"[LocalCam] Stream detected: {w}x{h} resolution")
     print(f"[LocalCam] Launching Virtual Camera device...")
 
+    backends = ["unityvideo", "obs", None] if sys.platform.startswith("win") else [None, "v4l2loopback"]
+    cam = None
+    last_err = None
+    for b in backends:
+        try:
+            kwargs = {"width": w, "height": h, "fps": requested_fps, "fmt": pyvirtualcam.PixelFormat.RGB}
+            if b:
+                kwargs["backend"] = b
+            cam = pyvirtualcam.Camera(**kwargs)
+            break
+        except Exception as e:
+            last_err = e
+            continue
+
+    if cam is None:
+        print("\n[ERROR] Could not start Virtual Camera driver!")
+        print(f"Details: {last_err}")
+        print("\nOn Windows without OBS Studio:")
+        print("Run 'install_virtual_camera.bat' as Administrator to register 'Unity Video Capture'.")
+        print("No OBS Studio installation is needed!")
+        sys.exit(1)
+
     try:
-        with pyvirtualcam.Camera(width=w, height=h, fps=requested_fps, fmt=pyvirtualcam.PixelFormat.RGB) as cam:
-            print(f"[LocalCam] ✓ Virtual Camera online: {cam.device}")
-            print(f"[LocalCam] You can now select '{cam.device}' in Zoom, Teams, Meet, OBS, Discord, etc.")
+        with cam:
+            print(f"[LocalCam] ✓ Virtual Camera online: '{cam.device}'")
+            print(f"[LocalCam] Select '{cam.device}' in VideoPsalm, Google Meet, Zoom, Teams, OBS, etc.")
             print("[LocalCam] Press Ctrl+C to stop streaming.")
 
             fps_counter = 0

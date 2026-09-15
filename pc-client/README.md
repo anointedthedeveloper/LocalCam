@@ -47,12 +47,22 @@ python localcam_pc_client.py
 
 ## Virtual Camera Setup (By Operating System)
 
-`LocalCam` uses `pyvirtualcam` to feed video into the virtual camera driver:
+### Windows (NO OBS STUDIO REQUIRED!)
+You do **NOT** need OBS Studio installed. Windows simply requires registering a lightweight DirectShow virtual camera driver:
 
-### Windows
-1. If you have **OBS Studio** installed: simply click **"Start Virtual Camera"** once in OBS (or install OBS Virtual Camera). `pyvirtualcam` will automatically detect and stream to **"OBS Virtual Camera"**.
-2. Alternatively, install **Unity Capture** or **Akvcam** DirectShow filters.
-3. In **Zoom / Teams / Meet / Discord**, select **"OBS Virtual Camera"** or **"LocalCam"** in the camera dropdown!
+1. **One-Time Driver Setup (takes 2 seconds):**
+   - Double-click or right-click `install_virtual_camera.bat` and select **"Run as administrator"**.
+   - Click "Yes" on the Windows prompt.
+   - It registers the DirectShow filter (`UnityCaptureFilter64.dll`).
+2. **Start Streaming:**
+   - On phone: Tap **START STREAM**.
+   - On PC: Double-click `start_pc_client.bat` and click **"Start Webcam Feed"**.
+3. **Select in VideoPsalm, Google Meet, Zoom, or Teams:**
+   - Open your app's Video/Camera settings.
+   - Select **"Unity Video Capture"** (or "LocalCam")!
+   - Video appears immediately in HD with ultra-low latency.
+
+*(Note: If you happen to already have OBS Studio installed, `pyvirtualcam` can also output to `OBS Virtual Camera` automatically).*
 
 ### macOS
 1. Install OBS Studio or the OBS macOS Virtual Camera plugin.

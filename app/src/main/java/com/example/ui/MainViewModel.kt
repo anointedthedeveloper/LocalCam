@@ -109,6 +109,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val port = _connectionState.value.port
         val server = LocalStreamServer(
             port = port,
+            context = getApplication(),
             onClientCountChanged = { clients ->
                 _connectionState.update { it.copy(connectedClients = clients) }
             },
