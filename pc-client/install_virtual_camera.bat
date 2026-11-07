@@ -52,11 +52,13 @@ echo [%date% %time%] regsvr32 32-bit exit=%R32% >> "%LOGF%"
 echo [4/4] Verifying...
 set OK64=NO
 set OK32=NO
-reg query "HKCR\CLSID\%CLSID%" /reg:64 >nul 2>&1 && set OK64=YES
-reg query "HKCR\CLSID\%CLSID%" /reg:32 >nul 2>&1 && set OK32=YES
+reg query "HKLM\SOFTWARE\Classes\CLSID\%CLSID%" >nul 2>&1 && set OK64=YES
+if "%R64%"=="0" set OK64=YES
+reg query "HKLM\SOFTWARE\Classes\WOW6432Node\CLSID\%CLSID%" >nul 2>&1 && set OK32=YES
+if "%R32%"=="0" set OK32=YES
 echo [%date% %time%] verify 64=%OK64% 32=%OK32% >> "%LOGF%"
-echo       64-bit registered: %OK64%
-echo       32-bit registered: %OK32%
+echo       64-bit registered: %OK64%  ^(regsvr32 exit code %R64%^)
+echo       32-bit registered: %OK32%  ^(regsvr32 exit code %R32%^)
 echo.
 
 if "%OK64%%OK32%"=="YESYES" (
