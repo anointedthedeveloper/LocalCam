@@ -836,6 +836,25 @@ class LocalCamClientApp:
                 last_err = be
         raise last_err or RuntimeError("No virtual camera backend available")
 
+    OUT_W, OUT_H = 1280, 720
+
+    def _fit_to_output(self, rgb):
+        """Letterbox any phone frame (portrait/landscape/any size) into a fixed 1280x720 canvas.
+
+        Webcam apps such as VideoPsalm expect a stable landscape size; a portrait or changing
+        size can make them report 'webcam not available'.
+        """
+        h, w = rgb.shape[:2]
+        if (w, h) == (self.OUT_W, self.OUT_H):
+            return rgb
+        scale = min(self.OUT_W / w, self.OUT_H / h)
+        nw, nh = max(1, int(w * scale)), max(1, int(h * scale))
+        resized = cv2.resize(rgb, (nw, nh), interpolation=cv2.INTER_AREA if scale < 1 else cv2.INTER_LINEAR)
+        canvas = np.zeros((self.OUT_H, self.OUT_W, 3), dtype=np.uint8)
+        x, y = (self.OUT_W - nw) // 2, (self.OUT_H - nh) // 2
+        canvas[y:y + nh, x:x + nw] = resized
+        return canvas
+
     def _vcam_sender_loop(self):
         """Pushes frames to the virtual camera at a steady 30 fps for as long as streaming is on.
 
@@ -853,6 +872,8 @@ class LocalCamClientApp:
                 frame = self.current_frame
             if frame is None:
                 frame = placeholder
+            else:
+                frame = self._fit_to_output(frame)
             h, w = frame.shape[:2]
             try:
                 if self._vcam_reset and self.vcam is not None:
@@ -869,8 +890,8 @@ class LocalCamClientApp:
                 frames += 1
                 if time.time() - last_hb >= 5:
                     last_hb = time.time()
-                    LOG.info("Heartbeat: %d frames pushed to virtual cam (%dx%d, phone feed %.1f fps%s)",
-                             frames, w, h, self.fps_display, "" if frame is not placeholder else ", NO PHONE VIDEO YET")
+                    LOG.info("Heartbeat: %d frames pushed to virtual cam (%dx%d, phone feed %dx%d @ %.1f fps%s)",
+                             frames, w, h, self.stream_width, self.stream_height, self.fps_display, "" if frame is not placeholder else ", NO PHONE VIDEO YET")
             except Exception as e:
                 LOG.error("Virtual camera error: %s: %s", type(e).__name__, e)
                 self.root.after(0, lambda e=e: self.vcam_status_text.set(f"Virtual Cam Error: {e}"))
