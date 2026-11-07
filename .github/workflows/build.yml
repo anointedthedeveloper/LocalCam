@@ -1,8 +1,11 @@
 name: Build executables
 on: [push, workflow_dispatch]
+permissions:
+  contents: write
 jobs:
   desktop:
     strategy:
+      fail-fast: false
       matrix: { os: [windows-latest, ubuntu-latest, macos-latest] }
     runs-on: ${{ matrix.os }}
     steps:
@@ -26,3 +29,22 @@ jobs:
         run: bash scripts/build_android.sh
       - uses: actions/upload-artifact@v4
         with: { name: LocalCam-android-apk, path: dist/LocalCam.apk }
+  release:
+    if: github.ref == 'refs/heads/main'
+    needs: [desktop, android]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { path: out }
+      - name: Collect files
+        run: |
+          mkdir rel
+          cp out/LocalCam-android-apk/LocalCam.apk rel/LocalCam.apk
+          cp out/LocalCam-desktop-windows-latest/LocalCam.exe rel/LocalCam.exe
+          cp out/LocalCam-desktop-macos-latest/LocalCam rel/LocalCam-macos || true
+          cp out/LocalCam-desktop-ubuntu-latest/LocalCam rel/LocalCam-linux || true
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: LocalCam latest build
+          files: rel/*
