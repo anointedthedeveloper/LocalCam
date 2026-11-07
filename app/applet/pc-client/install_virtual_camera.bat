@@ -5,69 +5,74 @@ echo ======================================================================
 echo           LocalCam Windows Virtual Camera Installer (NO OBS!)
 echo ======================================================================
 echo.
-echo This registers the lightweight DirectShow Virtual Camera driver into
-echo Windows so that Zoom, Google Meet, Microsoft Teams, Discord, and
-echo VideoPsalm detect LocalCam as a native webcam device.
-echo.
-echo No OBS Studio installation is required!
-echo.
 
-:: Check for administrative privileges
 >nul 2>&1 "%SYSTEMROOT%\system32\cacls.exe" "%SYSTEMROOT%\system32\config\system"
 if '%errorlevel%' NEQ '0' (
-    echo [INFO] Requesting Administrative Privileges to register the driver...
-    goto UACPrompt
-) else ( goto gotAdmin )
-
-:UACPrompt
+    echo [INFO] Requesting Administrator rights to register the driver...
     echo Set UAC = CreateObject^("Shell.Application"^) > "%temp%\getadmin.vbs"
-    set params=%*
-    echo UAC.ShellExecute "cmd.exe", "/c """"%~s0"" %params%", "", "runas", 1 >> "%temp%\getadmin.vbs"
+    echo UAC.ShellExecute "cmd.exe", "/c """"%~s0""""", "", "runas", 1 >> "%temp%\getadmin.vbs"
     "%temp%\getadmin.vbs"
     del "%temp%\getadmin.vbs"
     exit /B
+)
 
-:gotAdmin
-    pushd "%CD%"
-    CD /D "%~dp0"
+CD /D "%~dp0"
+set SRC=%~dp0driver
+if not exist "%SRC%\UnityCaptureFilter64.dll" set SRC=%~dp0
+set DEST=%ProgramData%\LocalCam\driver
+set LOGF=%ProgramData%\LocalCam\install.log
+set CLSID={5C2CD55C-92AD-4999-8666-912BD3E70010}
 
-    set DRIVER_DIR=%~dp0driver
-    if not exist "%DRIVER_DIR%\UnityCaptureFilter64.dll" (
-        set DRIVER_DIR=%~dp0
-    )
-
-    if not exist "%DRIVER_DIR%\UnityCaptureFilter64.dll" (
-        echo [INFO] Driver DLLs not found locally. Downloading from GitHub...
-        powershell -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://github.com/schellingb/UnityCapture/archive/refs/heads/master.zip' -OutFile '%temp%\unitycapture.zip'"
-        powershell -Command "Expand-Archive -Path '%temp%\unitycapture.zip' -DestinationPath '%temp%\uc_extract' -Force"
-        mkdir "%~dp0driver" 2>nul
-        copy "%temp%\uc_extract\UnityCapture-master\Install\UnityCaptureFilter*.dll" "%~dp0driver\" >nul
-        set DRIVER_DIR=%~dp0driver
-    )
-
-    if not exist "%DRIVER_DIR%\UnityCaptureFilter64.dll" (
-        echo [ERROR] Could not locate or download UnityCaptureFilter64.dll.
-        echo Please ensure you are connected to the phone or internet.
-        pause
-        exit /B 1
-    )
-
-    echo [1/2] Registering 64-bit Virtual Camera Filter...
-    regsvr32 /s "%DRIVER_DIR%\UnityCaptureFilter64.dll"
-
-    echo [2/2] Registering 32-bit Virtual Camera Filter...
-    regsvr32 /s "%DRIVER_DIR%\UnityCaptureFilter32.dll"
-
-    echo.
-    echo ======================================================================
-    echo   SUCCESS! Virtual Camera registered successfully!
-    echo ======================================================================
-    echo.
-    echo In Google Meet, VideoPsalm, Zoom, or Teams, you will now see:
-    echo   "Unity Video Capture" (or "LocalCam")
-    echo in your camera input device list!
-    echo.
-    echo You can now launch start_pc_client.bat and stream smoothly.
-    echo ======================================================================
-    echo.
+if not exist "%SRC%\UnityCaptureFilter64.dll" (
+    echo [ERROR] UnityCaptureFilter64.dll not found next to this script.
+    echo Re-download the LocalCam client folder and try again.
     pause
+    exit /B 1
+)
+
+mkdir "%ProgramData%\LocalCam" 2>nul
+echo [%date% %time%] install start, src=%SRC% > "%LOGF%"
+
+echo [1/4] Copying driver to a permanent folder: %DEST%
+echo       (Windows keeps pointing at this path, so it must not be a temp folder)
+mkdir "%DEST%" 2>nul
+copy /y "%SRC%\UnityCaptureFilter64.dll" "%DEST%\" >nul
+copy /y "%SRC%\UnityCaptureFilter32.dll" "%DEST%\" >nul
+
+echo [2/4] Registering 64-bit filter...
+regsvr32 /s "%DEST%\UnityCaptureFilter64.dll"
+set R64=%errorlevel%
+echo [%date% %time%] regsvr32 64-bit exit=%R64% >> "%LOGF%"
+
+echo [3/4] Registering 32-bit filter (needed by 32-bit apps such as VideoPsalm)...
+%SYSTEMROOT%\SysWOW64\regsvr32.exe /s "%DEST%\UnityCaptureFilter32.dll"
+set R32=%errorlevel%
+echo [%date% %time%] regsvr32 32-bit exit=%R32% >> "%LOGF%"
+
+echo [4/4] Verifying...
+set OK64=NO
+set OK32=NO
+reg query "HKCR\CLSID\%CLSID%" /reg:64 >nul 2>&1 && set OK64=YES
+reg query "HKCR\CLSID\%CLSID%" /reg:32 >nul 2>&1 && set OK32=YES
+echo [%date% %time%] verify 64=%OK64% 32=%OK32% >> "%LOGF%"
+echo       64-bit registered: %OK64%
+echo       32-bit registered: %OK32%
+echo.
+
+if "%OK64%%OK32%"=="YESYES" (
+    echo ======================================================================
+    echo   SUCCESS! "Unity Video Capture" is now a camera on this PC.
+    echo ======================================================================
+    echo 1. Start LocalCam and click START WEBCAM FEED.
+    echo 2. RESTART VideoPsalm / Zoom / Meet ^(apps only scan cameras at startup^).
+    echo 3. Choose "Unity Video Capture" as the video source.
+) else (
+    color 0C
+    echo ======================================================================
+    echo   FAILED - the camera driver did not register. Details: %LOGF%
+    echo ======================================================================
+    echo Try: right-click this file ^> Run as administrator, and temporarily
+    echo pause antivirus if it blocks the DLL. Send the log above if it persists.
+)
+echo.
+pause
