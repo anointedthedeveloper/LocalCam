@@ -22,3 +22,4 @@ build/
 *.spec
 __pycache__/
 *.pyc
+.venv-build/
