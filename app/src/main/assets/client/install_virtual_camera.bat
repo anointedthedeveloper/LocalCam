@@ -21,7 +21,8 @@ set SRC=%~dp0driver
 if not exist "%SRC%\UnityCaptureFilter64.dll" set SRC=%~dp0
 set DEST=%ProgramData%\LocalCam\driver
 set LOGF=%ProgramData%\LocalCam\install.log
-set CLSID={5C2CD55C-92AD-4999-8666-912BD3E70010}
+set CLSID64={5C2CD55C-92AD-4999-8666-912BD3E70010}
+set CLSID32={5C2CD55C-92AD-4999-8666-912BD3E70020}
 
 if not exist "%SRC%\UnityCaptureFilter64.dll" (
     echo [ERROR] UnityCaptureFilter64.dll not found next to this script.
@@ -52,9 +53,9 @@ echo [%date% %time%] regsvr32 32-bit exit=%R32% >> "%LOGF%"
 echo [4/4] Verifying...
 set OK64=NO
 set OK32=NO
-reg query "HKLM\SOFTWARE\Classes\CLSID\%CLSID%" >nul 2>&1 && set OK64=YES
+reg query "HKLM\SOFTWARE\Classes\CLSID\%CLSID64%" >nul 2>&1 && set OK64=YES
 if "%R64%"=="0" set OK64=YES
-reg query "HKLM\SOFTWARE\Classes\WOW6432Node\CLSID\%CLSID%" >nul 2>&1 && set OK32=YES
+reg query "HKLM\SOFTWARE\Classes\WOW6432Node\CLSID\%CLSID32%" >nul 2>&1 && set OK32=YES
 if "%R32%"=="0" set OK32=YES
 echo [%date% %time%] verify 64=%OK64% 32=%OK32% >> "%LOGF%"
 echo       64-bit registered: %OK64%  ^(regsvr32 exit code %R64%^)

@@ -66,7 +66,8 @@ def _setup_logging():
 LOG = _setup_logging()
 
 # CLSID of the Unity Capture DirectShow filter ("Unity Video Capture")
-UNITY_CAPTURE_CLSID = "{5C2CD55C-92AD-4999-8666-912BD3E70010}"
+UNITY_CAPTURE_CLSID = "{5C2CD55C-92AD-4999-8666-912BD3E70010}"  # 64-bit filter
+UNITY_CAPTURE_CLSID_32 = "{5C2CD55C-92AD-4999-8666-912BD3E70020}"  # 32-bit filter uses a different CLSID
 
 
 def log_environment():
@@ -78,7 +79,7 @@ def log_environment():
             import winreg
             for view, name in ((winreg.KEY_WOW64_64KEY, "64-bit"), (winreg.KEY_WOW64_32KEY, "32-bit")):
                 try:
-                    winreg.CloseKey(winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, "CLSID\\" + UNITY_CAPTURE_CLSID, 0, winreg.KEY_READ | view))
+                    winreg.CloseKey(winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, "CLSID\\" + (UNITY_CAPTURE_CLSID if name == "64-bit" else UNITY_CAPTURE_CLSID_32), 0, winreg.KEY_READ | view))
                     LOG.info("Unity Video Capture DirectShow filter REGISTERED (%s)", name)
                 except OSError:
                     LOG.warning("Unity Video Capture DirectShow filter NOT registered (%s) -> run install_virtual_camera.bat as admin; VideoPsalm/Meet will not list it", name)
