@@ -458,7 +458,22 @@ class LocalCamClientApp:
             pady=3,
             command=self.show_install_report
         )
-        btn_diag.pack(fill=tk.X, padx=10, pady=(0, 8))
+        btn_diag.pack(fill=tk.X, padx=10, pady=(0, 4))
+
+        btn_selftest = tk.Button(
+            vcam_box,
+            text="✅ Self-Test Virtual Camera (read it back)",
+            font=("Segoe UI", 8),
+            bg="#1C2333",
+            fg="#00E5FF",
+            bd=1,
+            relief=tk.SOLID,
+            cursor="hand2",
+            padx=8,
+            pady=3,
+            command=self.run_virtual_camera_selftest
+        )
+        btn_selftest.pack(fill=tk.X, padx=10, pady=(0, 8))
 
         # Divider
         tk.Frame(parent, bg="#283248", height=1).pack(fill=tk.X, padx=14, pady=6)
@@ -769,6 +784,64 @@ class LocalCamClientApp:
         finally:
             if not self.stop_event.is_set():
                 self.root.after(0, self.stop_streaming)
+
+    def run_virtual_camera_selftest(self):
+        """Reads the virtual camera back through DirectShow (like VideoPsalm would) and compares it to what we send."""
+        if not self.is_connected or self.vcam is None:
+            messagebox.showinfo("Self-Test", "Click START WEBCAM FEED first (and wait for 'LIVE'), then run the self-test.")
+            return
+        threading.Thread(target=self._selftest_worker, daemon=True).start()
+
+    def _selftest_worker(self):
+        report = []
+        matched = None
+        flags = getattr(cv2, "CAP_DSHOW", 0) if sys.platform.startswith("win") else 0
+        for idx in range(8):
+            try:
+                cap = cv2.VideoCapture(idx, flags) if flags else cv2.VideoCapture(idx)
+                if not cap.isOpened():
+                    cap.release()
+                    continue
+                frame = None
+                for _ in range(15):
+                    ok, f = cap.read()
+                    if ok and f is not None:
+                        frame = f
+                        if float(f.mean()) > 1:
+                            break
+                    time.sleep(0.05)
+                cap.release()
+                if frame is None:
+                    report.append(f"Camera #{idx}: opened but returned no frames")
+                    continue
+                h, w = frame.shape[:2]
+                mean = float(frame.mean())
+                with self.frame_lock:
+                    cur = self.current_frame
+                diff = None
+                if cur is not None:
+                    exp = cv2.cvtColor(self._fit_to_output(cur), cv2.COLOR_RGB2GRAY)
+                    got = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                    a = cv2.resize(exp, (32, 18), interpolation=cv2.INTER_AREA).astype(float)
+                    b = cv2.resize(got, (32, 18), interpolation=cv2.INTER_AREA).astype(float)
+                    diff = float(abs(a - b).mean())
+                tag = ""
+                if diff is not None and diff < 30 and mean > 1:
+                    matched = idx
+                    tag = "  <== THIS IS LOCALCAM'S VIRTUAL CAMERA"
+                report.append(f"Camera #{idx}: {w}x{h}, brightness {mean:.0f}, difference vs sent frame {diff if diff is None else round(diff)}{tag}")
+            except Exception as e:
+                report.append(f"Camera #{idx}: error {e}")
+        if matched is not None:
+            verdict = ("PASS: the virtual camera delivers LocalCam's video to a DirectShow app.\n"
+                       "If VideoPsalm is still black, the problem is inside VideoPsalm / the 32-bit driver, not LocalCam.")
+        elif not report:
+            verdict = "FAIL: no DirectShow cameras could be opened at all."
+        else:
+            verdict = "FAIL: LocalCam's video was not found on any camera. The virtual camera is not carrying our frames (driver/sender problem)."
+        for l in report + [verdict]:
+            LOG.info("SELFTEST: %s", l)
+        self.root.after(0, lambda: messagebox.showinfo("Virtual Camera Self-Test (build %s)" % BUILD, "\n".join(report) + "\n\n" + verdict))
 
     def show_install_report(self):
         """Shows (and logs) where the driver / OBS / VideoPsalm are installed."""
