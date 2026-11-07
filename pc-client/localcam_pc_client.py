@@ -65,32 +65,114 @@ def _setup_logging():
 
 LOG = _setup_logging()
 
+try:
+    from _version import BUILD
+except Exception:
+    BUILD = "dev"
+
 # CLSID of the Unity Capture DirectShow filter ("Unity Video Capture")
 UNITY_CAPTURE_CLSID = "{5C2CD55C-92AD-4999-8666-912BD3E70010}"  # 64-bit filter
 UNITY_CAPTURE_CLSID_32 = "{5C2CD55C-92AD-4999-8666-912BD3E70020}"  # 32-bit filter uses a different CLSID
 
 
 def log_environment():
+    LOG.info("LocalCam build %s", BUILD)
+    for _l in detect_install_info():
+        LOG.info("DETECT: %s", _l)
     LOG.info("LocalCam PC client | Python %s | %s | frozen=%s", sys.version.split()[0], platform.platform(), getattr(sys, "frozen", False))
     LOG.info("cv2=%s numpy=%s pyvirtualcam=%s", getattr(cv2, "__version__", "?"), np.__version__,
              getattr(pyvirtualcam, "__version__", "missing") if HAS_VIRTUAL_CAM else "missing")
     if sys.platform.startswith("win"):
         try:
             import winreg
-            for view, name in ((winreg.KEY_WOW64_64KEY, "64-bit"), (winreg.KEY_WOW64_32KEY, "32-bit")):
+            for name, sub in (("64-bit", "SOFTWARE\\Classes\\CLSID\\" + UNITY_CAPTURE_CLSID),
+                              ("32-bit", "SOFTWARE\\Classes\\WOW6432Node\\CLSID\\" + UNITY_CAPTURE_CLSID_32)):
                 try:
-                    winreg.CloseKey(winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, "CLSID\\" + (UNITY_CAPTURE_CLSID if name == "64-bit" else UNITY_CAPTURE_CLSID_32), 0, winreg.KEY_READ | view))
+                    winreg.CloseKey(winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, sub, 0, winreg.KEY_READ | winreg.KEY_WOW64_64KEY))
                     LOG.info("Unity Video Capture DirectShow filter REGISTERED (%s)", name)
                 except OSError:
-                    LOG.warning("Unity Video Capture DirectShow filter NOT registered (%s) -> run install_virtual_camera.bat as admin; VideoPsalm/Meet will not list it", name)
+                    LOG.warning("Unity Video Capture DirectShow filter NOT registered (%s) -> run install_virtual_camera.bat as admin", name)
         except Exception as e:
             LOG.debug("Registry check failed: %s", e)
+
+
+def _pe_bitness(path):
+    """Returns '32-bit' / '64-bit' for a Windows .exe by reading its PE header."""
+    try:
+        with open(path, "rb") as f:
+            f.seek(0x3C)
+            off = int.from_bytes(f.read(4), "little")
+            f.seek(off + 4)
+            machine = int.from_bytes(f.read(2), "little")
+        return {0x14C: "32-bit", 0x8664: "64-bit"}.get(machine, "unknown")
+    except Exception:
+        return "unknown"
+
+
+def detect_install_info():
+    """Finds where the virtual camera driver, OBS and VideoPsalm are installed. Returns a list of text lines."""
+    lines = []
+    if not sys.platform.startswith("win"):
+        lines.append("Detection details are Windows-only. On Linux check: ls /dev/video*")
+        return lines
+    import winreg
+
+    # 1) Where Windows thinks each Unity Capture filter lives (and whether that file still exists)
+    for label, sub in (("64-bit", "SOFTWARE\\Classes\\CLSID\\" + UNITY_CAPTURE_CLSID),
+                       ("32-bit", "SOFTWARE\\Classes\\WOW6432Node\\CLSID\\" + UNITY_CAPTURE_CLSID_32)):
+        try:
+            k = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, sub + "\\InprocServer32", 0, winreg.KEY_READ | winreg.KEY_WOW64_64KEY)
+            path = winreg.QueryValueEx(k, "")[0]
+            winreg.CloseKey(k)
+            ok = os.path.isfile(path)
+            lines.append(f"Virtual camera driver ({label}): registered at {path}  [{'file OK' if ok else 'FILE MISSING - reinstall driver'}]")
+        except OSError:
+            lines.append(f"Virtual camera driver ({label}): NOT registered -> run install_virtual_camera.bat")
+
+    perm = os.path.join(os.environ.get("ProgramData", r"C:\ProgramData"), "LocalCam", "driver")
+    lines.append(f"Driver folder {perm}: {'present' if os.path.isdir(perm) else 'not found'}")
+
+    # 2) OBS Studio (optional alternative backend)
+    obs = [p for p in (r"C:\Program Files\obs-studio", r"C:\Program Files (x86)\obs-studio") if os.path.isdir(p)]
+    lines.append("OBS Studio: " + (obs[0] if obs else "not installed (not needed)"))
+
+    # 3) VideoPsalm - from uninstall registry entries, then common folders
+    found = []
+    for root in (winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER):
+        for sub in (r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall", r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"):
+            try:
+                base = winreg.OpenKey(root, sub)
+            except OSError:
+                continue
+            for i in range(winreg.QueryInfoKey(base)[0]):
+                try:
+                    k = winreg.OpenKey(base, winreg.EnumKey(base, i))
+                    name = winreg.QueryValueEx(k, "DisplayName")[0]
+                    if "videopsalm" in name.lower():
+                        try:
+                            loc = winreg.QueryValueEx(k, "InstallLocation")[0]
+                        except OSError:
+                            loc = ""
+                        found.append(loc or name)
+                except OSError:
+                    continue
+    for d in (os.path.expandvars(r"%LOCALAPPDATA%\Programs\VideoPsalm"), r"C:\Program Files\VideoPsalm",
+              r"C:\Program Files (x86)\VideoPsalm", os.path.expandvars(r"%LOCALAPPDATA%\VideoPsalm")):
+        if os.path.isdir(d) and d not in found:
+            found.append(d)
+    if found:
+        for d in found[:2]:
+            exe = next((os.path.join(d, f) for f in os.listdir(d) if f.lower().startswith("videopsalm") and f.lower().endswith(".exe")), None) if os.path.isdir(d) else None
+            lines.append(f"VideoPsalm: {d}" + (f"  ({_pe_bitness(exe)} app -> uses the {_pe_bitness(exe)} camera driver)" if exe else ""))
+    else:
+        lines.append("VideoPsalm: install folder not found (that is OK - just select 'Unity Video Capture' inside it)")
+    return lines
 
 
 class LocalCamClientApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("LocalCam PC Virtual Webcam Client")
+        self.root.title(f"LocalCam PC Virtual Webcam Client  -  build {BUILD}")
         self.root.geometry("980x680")
         self.root.minsize(860, 580)
         self.root.configure(bg="#0A0D14")
@@ -361,7 +443,22 @@ class LocalCamClientApp:
             pady=3,
             command=self.restart_virtual_camera
         )
-        btn_restart_vcam.pack(fill=tk.X, padx=10, pady=(0, 8))
+        btn_restart_vcam.pack(fill=tk.X, padx=10, pady=(0, 4))
+
+        btn_diag = tk.Button(
+            vcam_box,
+            text="🔍 Detect Install (Driver / VideoPsalm)",
+            font=("Segoe UI", 8),
+            bg="#1C2333",
+            fg="#00E5FF",
+            bd=1,
+            relief=tk.SOLID,
+            cursor="hand2",
+            padx=8,
+            pady=3,
+            command=self.show_install_report
+        )
+        btn_diag.pack(fill=tk.X, padx=10, pady=(0, 8))
 
         # Divider
         tk.Frame(parent, bg="#283248", height=1).pack(fill=tk.X, padx=14, pady=6)
@@ -673,6 +770,13 @@ class LocalCamClientApp:
             if not self.stop_event.is_set():
                 self.root.after(0, self.stop_streaming)
 
+    def show_install_report(self):
+        """Shows (and logs) where the driver / OBS / VideoPsalm are installed."""
+        lines = detect_install_info()
+        for l in lines:
+            LOG.info("DETECT: %s", l)
+        messagebox.showinfo("Detected Setup  (build %s)" % BUILD, "\n\n".join(lines) + "\n\nAlso saved to the log file.")
+
     def restart_virtual_camera(self):
         """Safely releases and resets the virtual camera instance."""
         self._vcam_reset = True  # sender thread re-opens the device on its next frame
@@ -898,7 +1002,9 @@ class LocalCamClientApp:
             os.path.join(base_dir, script_name),
             os.path.join(base_dir, "driver", script_name),
             os.path.join(os.getcwd(), script_name),
-            os.path.join(os.getcwd(), "pc-client", script_name)
+            os.path.join(os.getcwd(), "pc-client", script_name),
+            os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), script_name),
+            os.path.join(getattr(sys, "_MEIPASS", base_dir), script_name)
         ]
         found = None
         for p in candidates:

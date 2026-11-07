@@ -15,7 +15,6 @@
 .cxx
 local.properties
 .env
-debug.keystore
 dist/
 .venv/
 build/
@@ -23,3 +22,4 @@ build/
 __pycache__/
 *.pyc
 .venv-build/
+pc-client/_version.py
