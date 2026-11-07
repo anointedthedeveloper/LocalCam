@@ -1,0 +1,22 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "LocalCam PC Client (GUI)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/pc-client/localcam_pc_client.py",
+      "cwd": "${workspaceFolder}/pc-client",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "LocalCam PC Client (CLI 192.168.43.1)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/pc-client/localcam_cli.py",
+      "args": ["--ip", "192.168.43.1", "--port", "8080"],
+      "cwd": "${workspaceFolder}/pc-client",
+      "console": "integratedTerminal"
+    }
+  ]
+}

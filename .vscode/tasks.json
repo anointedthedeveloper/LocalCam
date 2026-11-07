@@ -1,0 +1,17 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    { "label": "Setup PC client (venv + deps)", "type": "shell",
+      "command": "python3 -m venv .venv && .venv/bin/pip install -r pc-client/requirements.txt pyinstaller",
+      "windows": { "command": "python -m venv .venv; .venv\\Scripts\\pip install -r pc-client\\requirements.txt pyinstaller" },
+      "problemMatcher": [] },
+    { "label": "Build Desktop executable", "type": "shell",
+      "command": "bash scripts/build_desktop.sh",
+      "windows": { "command": "scripts\\build_desktop.bat" }, "problemMatcher": [] },
+    { "label": "Build Android APK", "type": "shell",
+      "command": "bash scripts/build_android.sh",
+      "windows": { "command": "scripts\\build_android.bat" }, "problemMatcher": [] },
+    { "label": "Build ALL (desktop + Android) -> dist/", "dependsOn": ["Build Desktop executable", "Build Android APK"],
+      "dependsOrder": "sequence", "group": { "kind": "build", "isDefault": true }, "problemMatcher": [] }
+  ]
+}
