@@ -788,7 +788,7 @@ class LocalCamClientApp:
             self.detected_camera_device.set("Preview Only (pip install pyvirtualcam)")
             return
 
-        backends = ["unityvideo", "obs", None] if sys.platform.startswith("win") else [None, "v4l2loopback"]
+        backends = ["unitycapture", "obs", None] if sys.platform.startswith("win") else [None, "v4l2loopback"]
         for b in backends:
             try:
                 kwargs = {"width": 640, "height": 480, "fps": 30, "fmt": pyvirtualcam.PixelFormat.RGB}

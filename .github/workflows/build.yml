@@ -1,0 +1,28 @@
+name: Build executables
+on: [push, workflow_dispatch]
+jobs:
+  desktop:
+    strategy:
+      matrix: { os: [windows-latest, ubuntu-latest, macos-latest] }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - name: Build desktop executable
+        shell: bash
+        run: python -m pip install -r pc-client/requirements.txt pyinstaller && bash scripts/build_desktop.sh
+      - uses: actions/upload-artifact@v4
+        with: { name: "LocalCam-desktop-${{ matrix.os }}", path: dist/* }
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "17" }
+      - uses: gradle/actions/setup-gradle@v4
+        with: { gradle-version: "9.3.1" }
+      - name: Build APK
+        run: bash scripts/build_android.sh
+      - uses: actions/upload-artifact@v4
+        with: { name: LocalCam-android-apk, path: dist/LocalCam.apk }

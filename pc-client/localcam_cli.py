@@ -50,7 +50,7 @@ def run_cli_stream(ip, port, mirror=True, requested_fps=30):
     print(f"[LocalCam] Stream detected: {w}x{h} resolution")
     print(f"[LocalCam] Launching Virtual Camera device...")
 
-    backends = ["unityvideo", "obs", None] if sys.platform.startswith("win") else [None, "v4l2loopback"]
+    backends = ["unitycapture", "obs", None] if sys.platform.startswith("win") else [None, "v4l2loopback"]
     cam = None
     last_err = None
     for b in backends:

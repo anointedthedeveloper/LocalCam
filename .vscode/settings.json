@@ -1,0 +1,6 @@
+{
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+  "python.terminal.activateEnvironment": true,
+  "files.exclude": { "**/.gradle": true, "**/build": true, "**/.venv": true },
+  "java.configuration.updateBuildConfiguration": "automatic"
+}

@@ -52,10 +52,14 @@ if '%errorlevel%' NEQ '0' (
         exit /B 1
     )
 
-    echo [1/2] Registering 64-bit Virtual Camera Filter...
+    echo [1/3] Clearing any existing filter instances...
+    regsvr32 /u /s "%DRIVER_DIR%\UnityCaptureFilter64.dll" 2>nul
+    regsvr32 /u /s "%DRIVER_DIR%\UnityCaptureFilter32.dll" 2>nul
+
+    echo [2/3] Registering 64-bit Virtual Camera Filter...
     regsvr32 /s "%DRIVER_DIR%\UnityCaptureFilter64.dll"
 
-    echo [2/2] Registering 32-bit Virtual Camera Filter...
+    echo [3/3] Registering 32-bit Virtual Camera Filter...
     regsvr32 /s "%DRIVER_DIR%\UnityCaptureFilter32.dll"
 
     echo.
@@ -63,11 +67,13 @@ if '%errorlevel%' NEQ '0' (
     echo   SUCCESS! Virtual Camera registered successfully!
     echo ======================================================================
     echo.
-    echo In Google Meet, VideoPsalm, Zoom, or Teams, you will now see:
-    echo   "Unity Video Capture" (or "LocalCam")
-    echo in your camera input device list!
+    echo VideoPsalm / Google Meet / Zoom Setup Instructions:
+    echo 1. Close any browser tabs with Google Meet, Zoom, Teams, or Camera apps.
+    echo 2. Run start_pc_client.bat and click "START WEBCAM FEED" FIRST.
+    echo 3. In VideoPsalm: Go to Settings ^> Video and select "Unity Video Capture".
     echo.
-    echo You can now launch start_pc_client.bat and stream smoothly.
+    echo (If VideoPsalm ever says "Webcam not available", click "Reset Virtual Cam"
+    echo  in the LocalCam PC Client and make sure other camera apps are closed.)
     echo ======================================================================
     echo.
     pause
