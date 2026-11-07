@@ -111,6 +111,8 @@ class LocalCamClientApp:
 
         # Virtual Cam instance
         self.vcam = None
+        self.vcam_thread = None
+        self._vcam_reset = False
         self.driver_warned = False
         self.detected_camera_device = tk.StringVar(value="Detecting camera driver...")
         self.vcam_status_text = tk.StringVar(
@@ -527,7 +529,13 @@ class LocalCamClientApp:
 
         stream_url = f"http://{ip}:{port}/stream.mjpg"
         LOG.info("START pressed -> %s", stream_url)
+        if self.vcam_thread is not None:
+            self.vcam_thread.join(timeout=2)
         self.stop_event.clear()
+        self.current_frame = None
+        if HAS_VIRTUAL_CAM:
+            self.vcam_thread = threading.Thread(target=self._vcam_sender_loop, daemon=True)
+            self.vcam_thread.start()
 
         # Update UI state
         self.is_connected = True
@@ -554,12 +562,8 @@ class LocalCamClientApp:
         self.stop_event.set()
         self.is_connected = False
 
-        if self.vcam:
-            try:
-                self.vcam.close()
-            except Exception:
-                pass
-            self.vcam = None
+        if self.vcam_thread is not None:
+            self.vcam_thread.join(timeout=2)  # sender thread closes the camera itself
 
         self.btn_connect.config(
             text="▶ START WEBCAM FEED",
@@ -670,12 +674,7 @@ class LocalCamClientApp:
 
     def restart_virtual_camera(self):
         """Safely releases and resets the virtual camera instance."""
-        if self.vcam is not None:
-            try:
-                self.vcam.close()
-            except Exception as e:
-                LOG.warning("Error closing virtual camera: %s", e)
-            self.vcam = None
+        self._vcam_reset = True  # sender thread re-opens the device on its next frame
 
         self.root.after(0, lambda: self.vcam_status_text.set("Virtual Camera: Resetting (Will re-link on next frame)"))
         messagebox.showinfo(
@@ -699,59 +698,6 @@ class LocalCamClientApp:
         # Send to Virtual Camera (RGB format)
         rgb_frame = cv2.cvtColor(bgr_frame, cv2.COLOR_BGR2RGB)
 
-        if HAS_VIRTUAL_CAM:
-            try:
-                if self.vcam is None or self.vcam.width != w or self.vcam.height != h:
-                    if self.vcam is not None:
-                        try:
-                            self.vcam.close()
-                        except Exception:
-                            pass
-                    LOG.info("Initializing virtual camera device at %dx%d...", w, h)
-
-                    # Try unitycapture FIRST (for standalone Windows users without OBS), then obs, then default
-                    backends = ["unitycapture", "obs", None] if sys.platform.startswith("win") else [None, "v4l2loopback"]
-                    last_err = None
-                    self.vcam = None
-                    for b in backends:
-                        try:
-                            kwargs = {"width": w, "height": h, "fps": 30, "fmt": pyvirtualcam.PixelFormat.RGB}
-                            if b:
-                                kwargs["backend"] = b
-                            self.vcam = pyvirtualcam.Camera(**kwargs)
-                            actual_dev = getattr(self.vcam, "device", "Unity Video Capture" if b == "unitycapture" else "Virtual Camera")
-                            LOG.info("ACTIVE virtual camera '%s' backend='%s' -> select this name in VideoPsalm/Meet/Zoom", actual_dev, b or "default")
-                            # Prime driver with first frame immediately
-                            self.vcam.send(rgb_frame)
-                            self.root.after(0, lambda d=actual_dev: (
-                                self.vcam_status_text.set(f"Virtual Camera: Active ({d})"),
-                                self.detected_camera_device.set(d)
-                            ))
-                            break
-                        except Exception as be:
-                            LOG.warning("Backend '%s' failed: %s: %s", b or "default", type(be).__name__, be)
-                            last_err = be
-                            continue
-
-                    if self.vcam is None:
-                        raise last_err or RuntimeError("No virtual camera backend available")
-
-                t0 = time.time()
-                self.vcam.send(rgb_frame)
-                self.vcam.sleep_until_next_frame()
-                self._vcam_frames = getattr(self, "_vcam_frames", 0) + 1
-                if t0 - getattr(self, "_last_hb", 0) >= 5:
-                    self._last_hb = t0
-                    LOG.info("Heartbeat: %d frames pushed to virtual cam (%dx%d, %.1f fps in). If VideoPsalm shows black, it is not reading the device.",
-                             self._vcam_frames, w, h, self.fps_display)
-            except Exception as e:
-                LOG.error("Virtual camera send failed: %s: %s", type(e).__name__, e)
-                # Driver might not be initialized yet
-                self.root.after(0, lambda: self.vcam_status_text.set(f"Virtual Cam Error: {e}"))
-                if not self.driver_warned:
-                    self.driver_warned = True
-                    self.root.after(500, self._prompt_missing_driver_dialog)
-
         # Calculate FPS
         self.fps_counter += 1
         now = time.time()
@@ -763,6 +709,83 @@ class LocalCamClientApp:
         # Store latest frame for GUI preview canvas
         with self.frame_lock:
             self.current_frame = rgb_frame
+
+    def _open_vcam(self, w, h):
+        """Open the virtual camera, trying Unity Capture (no OBS needed) first on Windows."""
+        backends = ["unitycapture", "obs", None] if sys.platform.startswith("win") else [None, "v4l2loopback"]
+        last_err = None
+        for b in backends:
+            try:
+                kwargs = {"width": w, "height": h, "fps": 30, "fmt": pyvirtualcam.PixelFormat.RGB}
+                if b:
+                    kwargs["backend"] = b
+                cam = pyvirtualcam.Camera(**kwargs)
+                dev = getattr(cam, "device", "Unity Video Capture" if b == "unitycapture" else "Virtual Camera")
+                LOG.info("ACTIVE virtual camera '%s' backend='%s' %dx%d -> select this name in VideoPsalm/Meet/Zoom", dev, b or "default", w, h)
+                self.root.after(0, lambda d=dev: (
+                    self.vcam_status_text.set(f"Virtual Camera: Active ({d})"),
+                    self.detected_camera_device.set(d)))
+                return cam
+            except Exception as be:
+                LOG.warning("Backend '%s' failed: %s: %s", b or "default", type(be).__name__, be)
+                last_err = be
+        raise last_err or RuntimeError("No virtual camera backend available")
+
+    def _vcam_sender_loop(self):
+        """Pushes frames to the virtual camera at a steady 30 fps for as long as streaming is on.
+
+        Runs independently of network capture so the device exists and always has a signal
+        (placeholder card or last frame) - apps like VideoPsalm see a live camera immediately.
+        """
+        placeholder = np.zeros((720, 1280, 3), dtype=np.uint8)
+        placeholder[:] = (20, 25, 35)
+        cv2.putText(placeholder, "LocalCam: waiting for phone video...", (180, 360),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1.4, (255, 229, 0), 3, cv2.LINE_AA)
+        frames = 0
+        last_hb = time.time()
+        while not self.stop_event.is_set():
+            with self.frame_lock:
+                frame = self.current_frame
+            if frame is None:
+                frame = placeholder
+            h, w = frame.shape[:2]
+            try:
+                if self._vcam_reset and self.vcam is not None:
+                    self._vcam_reset = False
+                    self.vcam.close()
+                    self.vcam = None
+                if self.vcam is None or self.vcam.width != w or self.vcam.height != h:
+                    if self.vcam is not None:
+                        self.vcam.close()
+                        self.vcam = None
+                    self.vcam = self._open_vcam(w, h)
+                self.vcam.send(frame)
+                self.vcam.sleep_until_next_frame()
+                frames += 1
+                if time.time() - last_hb >= 5:
+                    last_hb = time.time()
+                    LOG.info("Heartbeat: %d frames pushed to virtual cam (%dx%d, phone feed %.1f fps%s)",
+                             frames, w, h, self.fps_display, "" if frame is not placeholder else ", NO PHONE VIDEO YET")
+            except Exception as e:
+                LOG.error("Virtual camera error: %s: %s", type(e).__name__, e)
+                self.root.after(0, lambda e=e: self.vcam_status_text.set(f"Virtual Cam Error: {e}"))
+                if self.vcam is not None:
+                    try:
+                        self.vcam.close()
+                    except Exception:
+                        pass
+                    self.vcam = None
+                if not self.driver_warned:
+                    self.driver_warned = True
+                    self.root.after(500, self._prompt_missing_driver_dialog)
+                self.stop_event.wait(1.0)
+        if self.vcam is not None:
+            try:
+                self.vcam.close()
+            except Exception:
+                pass
+            self.vcam = None
+        LOG.info("Virtual camera sender stopped")
 
     def _update_preview_canvas(self):
         """Draws the live frame scaled to the Tkinter canvas."""

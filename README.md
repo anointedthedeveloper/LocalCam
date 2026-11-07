@@ -134,3 +134,8 @@ In **VS Code**: `Ctrl+Shift+B` runs **Build ALL**, and **Run and Debug → Local
 
 ## Diagnostics / logs
 The desktop client logs to the console (VS Code terminal) and to `~/LocalCam/logs/localcam.log` (Windows: `C:\Users\<you>\LocalCam\logs\localcam.log`). It records the environment, whether the Unity Video Capture DirectShow filter is registered, each backend tried and why it failed, every START/stop, and a 5-second heartbeat of frames pushed to the virtual camera. On the phone, every HTTP request is logged under the tag `LocalStreamServer` (`adb logcat -s LocalStreamServer`). Note: Windows does not tell us when VideoPsalm opens the camera; if the heartbeat is running but VideoPsalm is black, the app is not reading the device (re-select **Unity Video Capture**, and close other apps holding it).
+
+### VideoPsalm checklist
+1. Run `install_virtual_camera.bat` (it asks for admin) and confirm it prints **64-bit registered: YES** and **32-bit registered: YES**. It copies the driver to `C:\ProgramData\LocalCam\driver` so it keeps working after you close or move the app (log: `C:\ProgramData\LocalCam\install.log`).
+2. Start LocalCam and click **START WEBCAM FEED**. The camera now exists immediately and shows a "waiting for phone" card until video arrives.
+3. **Restart VideoPsalm** (apps only scan for cameras at launch), then pick **Unity Video Capture**.
