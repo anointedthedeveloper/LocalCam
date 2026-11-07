@@ -8,6 +8,7 @@ $PY -m pip install -q -r pc-client/requirements.txt pyinstaller
 SEP=":"; case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) SEP=";";; esac
 ROOT=$($PY -c 'import os;print(os.path.abspath("."))')
 SRC="$ROOT/pc-client"
+echo "BUILD = \"${LOCALCAM_BUILD:-dev}\"" > "$SRC/_version.py"
 $PY -m PyInstaller --noconfirm --clean --onefile --windowed --name LocalCam \
   --distpath "$ROOT/dist" --workpath "$ROOT/build/pyinstaller" --specpath "$ROOT/build/pyinstaller" \
   --add-data "$SRC/driver${SEP}driver" \
