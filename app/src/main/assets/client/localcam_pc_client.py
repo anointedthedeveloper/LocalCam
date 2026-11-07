@@ -11,6 +11,9 @@ import time
 import threading
 import urllib.request
 import json
+import logging
+import logging.handlers
+import platform
 import tkinter as tk
 from tkinter import ttk, messagebox
 
@@ -36,6 +39,51 @@ try:
     import requests
 except ImportError:
     requests = None
+
+
+def _setup_logging():
+    """Logs to console (VS Code terminal) AND ~/LocalCam/logs/localcam.log."""
+    log = logging.getLogger("localcam")
+    if log.handlers:
+        return log
+    log.setLevel(logging.DEBUG)
+    fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s", "%H:%M:%S")
+    sh = logging.StreamHandler()
+    sh.setFormatter(fmt)
+    log.addHandler(sh)
+    try:
+        d = os.path.join(os.path.expanduser("~"), "LocalCam", "logs")
+        os.makedirs(d, exist_ok=True)
+        fh = logging.handlers.RotatingFileHandler(os.path.join(d, "localcam.log"), maxBytes=1_000_000, backupCount=3, encoding="utf-8")
+        fh.setFormatter(fmt)
+        log.addHandler(fh)
+        log.info("Log file: %s", os.path.join(d, "localcam.log"))
+    except Exception as e:
+        log.warning("Could not create log file: %s", e)
+    return log
+
+
+LOG = _setup_logging()
+
+# CLSID of the Unity Capture DirectShow filter ("Unity Video Capture")
+UNITY_CAPTURE_CLSID = "{5C2CD55C-92AD-4999-8666-912BD3E70010}"
+
+
+def log_environment():
+    LOG.info("LocalCam PC client | Python %s | %s | frozen=%s", sys.version.split()[0], platform.platform(), getattr(sys, "frozen", False))
+    LOG.info("cv2=%s numpy=%s pyvirtualcam=%s", getattr(cv2, "__version__", "?"), np.__version__,
+             getattr(pyvirtualcam, "__version__", "missing") if HAS_VIRTUAL_CAM else "missing")
+    if sys.platform.startswith("win"):
+        try:
+            import winreg
+            for view, name in ((winreg.KEY_WOW64_64KEY, "64-bit"), (winreg.KEY_WOW64_32KEY, "32-bit")):
+                try:
+                    winreg.CloseKey(winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, "CLSID\\" + UNITY_CAPTURE_CLSID, 0, winreg.KEY_READ | view))
+                    LOG.info("Unity Video Capture DirectShow filter REGISTERED (%s)", name)
+                except OSError:
+                    LOG.warning("Unity Video Capture DirectShow filter NOT registered (%s) -> run install_virtual_camera.bat as admin; VideoPsalm/Meet will not list it", name)
+        except Exception as e:
+            LOG.debug("Registry check failed: %s", e)
 
 
 class LocalCamClientApp:
@@ -478,6 +526,7 @@ class LocalCamClientApp:
             return
 
         stream_url = f"http://{ip}:{port}/stream.mjpg"
+        LOG.info("START pressed -> %s", stream_url)
         self.stop_event.clear()
 
         # Update UI state
@@ -539,14 +588,14 @@ class LocalCamClientApp:
 
     def _stream_capture_worker(self, stream_url):
         """Worker thread that consumes the MJPEG stream and outputs to the Virtual Camera."""
-        print(f"[LocalCam] Connecting to stream: {stream_url}")
+        LOG.info("Connecting to stream: %s", stream_url)
 
         # Try OpenCV VideoCapture first for high-performance decoding
         cap = cv2.VideoCapture(stream_url)
         
         # Test if opened successfully
         if not cap.isOpened():
-            print("[LocalCam] OpenCV capture failed, falling back to HTTP stream parser...")
+            LOG.warning("OpenCV capture failed to open %s, falling back to HTTP stream parser", stream_url)
             self._fallback_mjpeg_stream_worker(stream_url)
             return
 
@@ -564,7 +613,7 @@ class LocalCamClientApp:
             if not ret or frame is None:
                 consecutive_errors += 1
                 if consecutive_errors > 40:
-                    print("[LocalCam] Stream disconnected.")
+                    LOG.warning("Stream disconnected (no frames for ~40 reads)")
                     break
                 time.sleep(0.02)
                 continue
@@ -606,7 +655,7 @@ class LocalCamClientApp:
                     if frame is not None:
                         self._process_and_dispatch_frame(frame)
         except Exception as e:
-            print(f"[LocalCam] Fallback stream error: {e}")
+            LOG.error("Fallback stream error: %s", e)
             self.root.after(0, lambda: messagebox.showerror(
                 "Connection Failed",
                 f"Could not connect to phone at {stream_url}.\n\n"
@@ -625,7 +674,7 @@ class LocalCamClientApp:
             try:
                 self.vcam.close()
             except Exception as e:
-                print(f"[LocalCam] Error closing virtual camera: {e}")
+                LOG.warning("Error closing virtual camera: %s", e)
             self.vcam = None
 
         self.root.after(0, lambda: self.vcam_status_text.set("Virtual Camera: Resetting (Will re-link on next frame)"))
@@ -658,7 +707,7 @@ class LocalCamClientApp:
                             self.vcam.close()
                         except Exception:
                             pass
-                    print(f"[LocalCam] Initializing virtual camera device at {w}x{h}...")
+                    LOG.info("Initializing virtual camera device at %dx%d...", w, h)
 
                     # Try unitycapture FIRST (for standalone Windows users without OBS), then obs, then default
                     backends = ["unitycapture", "obs", None] if sys.platform.startswith("win") else [None, "v4l2loopback"]
@@ -671,7 +720,7 @@ class LocalCamClientApp:
                                 kwargs["backend"] = b
                             self.vcam = pyvirtualcam.Camera(**kwargs)
                             actual_dev = getattr(self.vcam, "device", "Unity Video Capture" if b == "unitycapture" else "Virtual Camera")
-                            print(f"[LocalCam] Active virtual camera: '{actual_dev}' using backend '{b or 'default'}'")
+                            LOG.info("ACTIVE virtual camera '%s' backend='%s' -> select this name in VideoPsalm/Meet/Zoom", actual_dev, b or "default")
                             # Prime driver with first frame immediately
                             self.vcam.send(rgb_frame)
                             self.root.after(0, lambda d=actual_dev: (
@@ -680,15 +729,23 @@ class LocalCamClientApp:
                             ))
                             break
                         except Exception as be:
+                            LOG.warning("Backend '%s' failed: %s: %s", b or "default", type(be).__name__, be)
                             last_err = be
                             continue
 
                     if self.vcam is None:
                         raise last_err or RuntimeError("No virtual camera backend available")
 
+                t0 = time.time()
                 self.vcam.send(rgb_frame)
                 self.vcam.sleep_until_next_frame()
+                self._vcam_frames = getattr(self, "_vcam_frames", 0) + 1
+                if t0 - getattr(self, "_last_hb", 0) >= 5:
+                    self._last_hb = t0
+                    LOG.info("Heartbeat: %d frames pushed to virtual cam (%dx%d, %.1f fps in). If VideoPsalm shows black, it is not reading the device.",
+                             self._vcam_frames, w, h, self.fps_display)
             except Exception as e:
+                LOG.error("Virtual camera send failed: %s: %s", type(e).__name__, e)
                 # Driver might not be initialized yet
                 self.root.after(0, lambda: self.vcam_status_text.set(f"Virtual Cam Error: {e}"))
                 if not self.driver_warned:
@@ -777,7 +834,7 @@ class LocalCamClientApp:
             try:
                 urllib.request.urlopen(url, timeout=2.0)
             except Exception as e:
-                print(f"[LocalCam] Control action failed: {e}")
+                LOG.warning("Control action %s failed: %s", url, e)
 
         threading.Thread(target=_send, daemon=True).start()
 
@@ -797,12 +854,15 @@ class LocalCamClientApp:
                 test_cam = pyvirtualcam.Camera(**kwargs)
                 dev_name = getattr(test_cam, "device", "Virtual Camera")
                 test_cam.close()
+                LOG.info("Driver probe OK: backend='%s' device='%s'", b or "default", dev_name)
                 self.vcam_status_text.set(f"Virtual Camera: Ready ({dev_name})")
                 self.detected_camera_device.set(f"'{dev_name}'")
                 return
-            except Exception:
+            except Exception as e:
+                LOG.warning("Driver probe: backend '%s' unavailable: %s", b or "default", e)
                 continue
 
+        LOG.error("No virtual camera backend available")
         self.vcam_status_text.set("Virtual Cam: No Driver Found (Run install_virtual_camera.bat)")
         self.detected_camera_device.set("Driver Missing (Click 'Install Driver' below)")
 
@@ -862,6 +922,8 @@ class LocalCamClientApp:
 
 
 def main():
+    log_environment()
+    sys.excepthook = lambda t, v, tb: LOG.critical("Unhandled exception", exc_info=(t, v, tb))
     root = tk.Tk()
     app = LocalCamClientApp(root)
     root.mainloop()

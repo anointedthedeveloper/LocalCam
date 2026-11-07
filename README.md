@@ -131,3 +131,6 @@ Both artifacts land in `dist/`:
 | Android (`LocalCam.apk`) | `bash scripts/build_android.sh` (Windows: `scripts\build_android.bat`) | JDK 17 + Android SDK |
 
 In **VS Code**: `Ctrl+Shift+B` runs **Build ALL**, and **Run and Debug → LocalCam PC Client** launches the desktop client. GitHub Actions (`.github/workflows/build.yml`) also builds and uploads both on every push. The desktop exe bundles all dependencies and the virtual-camera driver, so it runs fully offline. Windows: run `install_virtual_camera.bat` once as admin, then pick **Unity Video Capture** in VideoPsalm.
+
+## Diagnostics / logs
+The desktop client logs to the console (VS Code terminal) and to `~/LocalCam/logs/localcam.log` (Windows: `C:\Users\<you>\LocalCam\logs\localcam.log`). It records the environment, whether the Unity Video Capture DirectShow filter is registered, each backend tried and why it failed, every START/stop, and a 5-second heartbeat of frames pushed to the virtual camera. On the phone, every HTTP request is logged under the tag `LocalStreamServer` (`adb logcat -s LocalStreamServer`). Note: Windows does not tell us when VideoPsalm opens the camera; if the heartbeat is running but VideoPsalm is black, the app is not reading the device (re-select **Unity Video Capture**, and close other apps holding it).

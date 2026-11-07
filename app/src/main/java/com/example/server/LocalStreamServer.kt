@@ -196,6 +196,7 @@ class LocalStreamServer(
                 }
             }
 
+            Log.i(TAG, "REQUEST $method $uriWithQuery from ${socket.inetAddress?.hostAddress} UA=$userAgent (active video clients: ${videoClients.size})")
             val outputStream = BufferedOutputStream(socket.getOutputStream())
 
             when {
