@@ -704,86 +704,102 @@ class LocalCamClientApp:
         )
 
     def _stream_capture_worker(self, stream_url):
-        """Worker thread that consumes the MJPEG stream and outputs to the Virtual Camera."""
+        """Keeps the phone stream connected: reconnects automatically and never tears down the virtual camera.
+
+        While reconnecting, the virtual camera keeps showing the last frame so VideoPsalm/Meet/Zoom do not go black.
+        """
         LOG.info("Connecting to stream: %s", stream_url)
-
-        # Try OpenCV VideoCapture first for high-performance decoding
-        cap = cv2.VideoCapture(stream_url)
-        
-        # Test if opened successfully
-        if not cap.isOpened():
-            LOG.warning("OpenCV capture failed to open %s, falling back to HTTP stream parser", stream_url)
-            self._fallback_mjpeg_stream_worker(stream_url)
-            return
-
-        # Connected
-        self.root.after(0, lambda: self.status_badge.config(
-            text="● LIVE TO VIRTUAL CAM",
-            fg="#FF3B30",
-            bg="#361517"
-        ))
-
-        consecutive_errors = 0
-
+        ever_connected = False
+        failures = 0
         while not self.stop_event.is_set():
-            ret, frame = cap.read()
-            if not ret or frame is None:
-                consecutive_errors += 1
-                if consecutive_errors > 40:
-                    LOG.warning("Stream disconnected (no frames for ~40 reads)")
-                    break
-                time.sleep(0.02)
-                continue
+            got_frames = self._run_stream_once(stream_url)
+            if self.stop_event.is_set():
+                break
+            if got_frames:
+                ever_connected = True
+                failures = 0
+            else:
+                failures += 1
+            self.root.after(0, lambda: self.status_badge.config(text="● RECONNECTING...", fg="#FFB300", bg="#2E2412"))
+            LOG.warning("Stream lost (%s). Reconnecting in 2s... (attempt %d)", stream_url, failures)
+            if failures == 5 and not ever_connected:
+                self.root.after(0, lambda: messagebox.showerror(
+                    "Connection Failed",
+                    f"Could not connect to phone at {stream_url}.\n\n"
+                    "Please verify:\n"
+                    "1. Phone and PC are on the same Wi-Fi / hotspot\n"
+                    "2. LocalCam is open on the phone and STREAM is started\n"
+                    "3. IP address and port match\n\n"
+                    "LocalCam keeps retrying automatically."))
+            self.stop_event.wait(2.0)
 
-            consecutive_errors = 0
-            self._process_and_dispatch_frame(frame)
+    def _mark_live(self):
+        self.root.after(0, lambda: self.status_badge.config(text="● LIVE TO VIRTUAL CAM", fg="#FF3B30", bg="#361517"))
 
-        cap.release()
-        if not self.stop_event.is_set():
-            self.root.after(0, self.stop_streaming)
-
-    def _fallback_mjpeg_stream_worker(self, stream_url):
-        """Direct multipart/x-mixed-replace HTTP chunk decoder if OpenCV VideoCapture fails."""
-        try:
-            req = urllib.request.Request(
-                stream_url,
-                headers={"User-Agent": "LocalCam-PC-Client/1.0"}
-            )
-            stream = urllib.request.urlopen(req, timeout=8)
-            bytes_data = b""
-
-            self.root.after(0, lambda: self.status_badge.config(
-                text="● LIVE TO VIRTUAL CAM",
-                fg="#FF3B30",
-                bg="#361517"
-            ))
-
+    def _run_stream_once(self, stream_url):
+        """One connection attempt. Returns True if at least one frame was received."""
+        got_frames = False
+        # 1) OpenCV/FFmpeg (fast path)
+        cap = cv2.VideoCapture(stream_url)
+        if cap.isOpened():
+            misses = 0
             while not self.stop_event.is_set():
-                chunk = stream.read(4096)
+                ret, frame = cap.read()
+                if not ret or frame is None:
+                    misses += 1
+                    if misses > 40:
+                        LOG.warning("OpenCV stream stalled (no frames for ~40 reads)")
+                        break
+                    time.sleep(0.02)
+                    continue
+                misses = 0
+                if not got_frames:
+                    got_frames = True
+                    LOG.info("Receiving video via OpenCV")
+                    self._mark_live()
+                self._process_and_dispatch_frame(frame)
+            cap.release()
+            return got_frames
+        cap.release()
+        LOG.warning("OpenCV could not open %s, using built-in HTTP parser", stream_url)
+
+        # 2) Built-in MJPEG parser
+        try:
+            req = urllib.request.Request(stream_url, headers={"User-Agent": "LocalCam-PC-Client/1.0"})
+            stream = urllib.request.urlopen(req, timeout=5)
+            buf = bytearray()
+            while not self.stop_event.is_set():
+                chunk = stream.read1(65536)  # returns as soon as ANY data is available
                 if not chunk:
+                    LOG.warning("Phone closed the stream")
                     break
-                bytes_data += chunk
-                a = bytes_data.find(b"\xff\xd8")  # JPEG start
-                b = bytes_data.find(b"\xff\xd9")  # JPEG end
-                if a != -1 and b != -1 and b > a:
-                    jpg = bytes_data[a : b + 2]
-                    bytes_data = bytes_data[b + 2 :]
-                    frame = cv2.imdecode(np.frombuffer(jpg, dtype=np.uint8), cv2.IMREAD_COLOR)
+                buf += chunk
+                last = None
+                while True:  # extract every complete JPEG, keep only the newest (lowest latency)
+                    a = buf.find(b"\xff\xd8")
+                    if a == -1:
+                        buf.clear()
+                        break
+                    e = buf.find(b"\xff\xd9", a + 2)
+                    if e == -1:
+                        if a > 0:
+                            del buf[:a]
+                        break
+                    last = bytes(buf[a:e + 2])
+                    del buf[:e + 2]
+                if len(buf) > 8_000_000:
+                    buf.clear()
+                if last is not None:
+                    frame = cv2.imdecode(np.frombuffer(last, dtype=np.uint8), cv2.IMREAD_COLOR)
                     if frame is not None:
+                        if not got_frames:
+                            got_frames = True
+                            LOG.info("Receiving video via built-in parser")
+                            self._mark_live()
                         self._process_and_dispatch_frame(frame)
         except Exception as e:
-            LOG.error("Fallback stream error: %s", e)
-            self.root.after(0, lambda: messagebox.showerror(
-                "Connection Failed",
-                f"Could not connect to phone at {stream_url}.\n\n"
-                "Please verify:\n"
-                "1. Phone hotspot or Wi-Fi is connected\n"
-                "2. LocalCam is running and 'STREAM' is active\n"
-                "3. IP address and port match"
-            ))
-        finally:
-            if not self.stop_event.is_set():
-                self.root.after(0, self.stop_streaming)
+            LOG.error("Stream error: %s: %s", type(e).__name__, e)
+        return got_frames
 
     def run_virtual_camera_selftest(self):
         """Reads the virtual camera back through DirectShow (like VideoPsalm would) and compares it to what we send."""

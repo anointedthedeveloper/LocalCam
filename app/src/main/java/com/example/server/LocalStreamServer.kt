@@ -7,6 +7,7 @@ import com.example.data.StreamStats
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -31,7 +32,8 @@ class LocalStreamServer(
 ) {
     companion object {
         private const val TAG = "LocalStreamServer"
-        private const val BOUNDARY = "--frame"
+        // NOTE: the boundary parameter in Content-Type must NOT include the leading "--" (that is only the delimiter prefix)
+        private const val BOUNDARY = "frame"
     }
 
     private var serverSocket: ServerSocket? = null
@@ -42,6 +44,8 @@ class LocalStreamServer(
     // Map of active video streaming clients (Socket -> OutputStream)
     private val videoClients = ConcurrentHashMap<Socket, OutputStream>()
     private val clientInfoMap = ConcurrentHashMap<Socket, ConnectedClient>()
+    // Per-client "latest frame only" queue so one slow Wi-Fi link never stalls the camera thread
+    private val clientChannels = ConcurrentHashMap<Socket, Channel<ByteArray>>()
 
     // Latest single frame for /snapshot.jpg
     @Volatile
@@ -96,6 +100,8 @@ class LocalStreamServer(
                 socket.close()
             } catch (ignored: Exception) {}
         }
+        clientChannels.values.forEach { it.close() }
+        clientChannels.clear()
         videoClients.clear()
         clientInfoMap.clear()
         notifyClientsChanged()
@@ -135,35 +141,34 @@ class LocalStreamServer(
 
         if (videoClients.isEmpty()) return
 
-        val headerString = "\r\n$BOUNDARY\r\n" +
-                "Content-Type: image/jpeg\r\n" +
-                "Content-Length: ${jpegBytes.size}\r\n\r\n"
-        val headerBytes = headerString.toByteArray(StandardCharsets.US_ASCII)
+        // Conflated channel: always keeps only the newest frame for each client (slow clients skip frames)
+        clientChannels.values.forEach { it.trySend(jpegBytes) }
+    }
 
-        val deadSockets = mutableListOf<Socket>()
-
-        videoClients.forEach { (socket, outStream) ->
+    private fun startClientWriter(socket: Socket, outStream: OutputStream) {
+        val channel = Channel<ByteArray>(Channel.CONFLATED)
+        clientChannels[socket] = channel
+        scope.launch {
             try {
-                outStream.write(headerBytes)
-                outStream.write(jpegBytes)
-                outStream.flush()
-
-                framesSentCount.incrementAndGet()
-                bytesSentCount.addAndGet((headerBytes.size + jpegBytes.size).toLong())
+                for (jpeg in channel) {
+                    val header = ("\r\n--$BOUNDARY\r\n" +
+                        "Content-Type: image/jpeg\r\n" +
+                        "Content-Length: ${jpeg.size}\r\n\r\n").toByteArray(StandardCharsets.US_ASCII)
+                    outStream.write(header)
+                    outStream.write(jpeg)
+                    outStream.flush()
+                    framesSentCount.incrementAndGet()
+                    bytesSentCount.addAndGet((header.size + jpeg.size).toLong())
+                }
             } catch (e: Exception) {
-                deadSockets.add(socket)
-            }
-        }
-
-        if (deadSockets.isNotEmpty()) {
-            deadSockets.forEach { socket ->
+                Log.i(TAG, "Video client ${socket.inetAddress?.hostAddress} disconnected: ${e.message}")
+            } finally {
                 videoClients.remove(socket)
                 clientInfoMap.remove(socket)
-                try {
-                    socket.close()
-                } catch (ignored: Exception) {}
+                clientChannels.remove(socket)?.close()
+                try { socket.close() } catch (ignored: Exception) {}
+                notifyClientsChanged()
             }
-            notifyClientsChanged()
         }
     }
 
@@ -247,6 +252,7 @@ class LocalStreamServer(
 
                     videoClients[socket] = outputStream
                     clientInfoMap[socket] = client
+                    startClientWriter(socket, outputStream)
                     notifyClientsChanged()
                     // Keep socket open for continuous streaming in onFrameAvailable
                 }
